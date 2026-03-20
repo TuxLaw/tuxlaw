@@ -1,7 +1,649 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverless Group Voice & Text Chat</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h1, h2, h3 { margin-top: 0; color: #0056b3; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0 16px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0b5ed7; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #bb2d3b; }
+        .btn-success { background-color: #198754; }
+        .btn-success:hover { background-color: #157347; }
+        
+        /* Layout for Chat Screen */
+        #chat-screen { display: none; }
+        .header-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            flex: 1;
+            min-width: 300px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Participant List & Volume */
+        .participant-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+        .participant-list li {
+            padding: 12px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        .peer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .status-badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: #ffc107;
+            color: #000;
+        }
+        .status-badge.connected { background: #198754; color: white; }
+        
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 13px;
+            color: #555;
+            margin-top: 8px;
+        }
+        .volume-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+        }
+        .volume-slider-container input[type="range"] {
+            flex: 1;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        /* Audio Meter UI */
+        .meter-bg {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .meter-fill {
+            height: 100%;
+            background: #0d6efd;
+            width: 0%;
+            transition: width 0.05s ease-out, background-color 0.2s ease;
+        }
+        .meter-fill.local { background: #198754; } 
+
+        /* Text Chat */
+        #chatHistory {
+            flex: 1;
+            height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .chat-msg {
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+        .chat-msg.self {
+            background: #0d6efd;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .chat-msg.other {
+            background: #e9ecef;
+            color: black;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+        .chat-msg strong { font-size: 12px; display: block; margin-bottom: 2px; opacity: 0.8; }
+        .chat-input-row { display: flex; gap: 10px; }
+        .chat-input-row input { margin: 0; }
+    </style>
+</head>
 <body>
-    <h1>Hello, World!</h1>
-    <p>Welcome to my GitHub Pages site.</p>
+
+<div class="container">
+    <div class="card" id="setup-screen">
+        <h1 style="text-align: center;">Voice & Text Room</h1>
+        <p style="text-align: center;">Join a serverless P2P mesh network.</p>
+        
+        <input type="text" id="userName" placeholder="Your Name (e.g., Alice)" autocomplete="off">
+        <input type="text" id="roomId" placeholder="Room Name (e.g., dev-chat-123)" autocomplete="off">
+        
+        <button id="joinBtn" style="width: 100%;">Join Room</button>
+        <p id="statusText" style="color: #666; font-size: 14px; display: none; text-align: center;">Requesting microphone...</p>
+    </div>
+
+    <div class="card" id="chat-screen">
+        <div class="header-controls">
+            <h2 id="roomTitle" style="margin: 0;">Room: ...</h2>
+            <div>
+                <button id="muteBtn" class="btn-success">Mute My Mic</button>
+                <button id="leaveBtn" class="btn-danger">Leave</button>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <div class="panel">
+                <h3>Participants & Audio</h3>
+                
+                <!-- Noise Gate Threshold Controls -->
+                <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
+                    <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">
+                        Activation Threshold: <span id="thresholdVal">10</span>%
+                    </label>
+                    <input type="range" id="micThreshold" min="0" max="100" value="10" style="width: 100%;">
+                </div>
+
+                <ul id="participants" class="participant-list">
+                    <!-- Peers inject here -->
+                </ul>
+            </div>
+
+            <div class="panel">
+                <h3>Text Chat</h3>
+                <div id="chatHistory"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+                    <button id="sendChatBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="audio-container" style="display: none;"></div>
+
+<script>
+    const rtcConfig = { iceServers:[{ urls: 'stun:stun.l.google.com:19302' }] };
+    
+    let localStream;
+    let rtcStream; // Filtered stream strictly for WebRTC delivery
+    let mqttClient;
+    let myId = Math.random().toString(36).substring(2, 12);
+    let myName = '';
+    let roomTopic = '';
+    let lastSpeakTime = 0;
+    
+    // Web Audio API for visual meters and filters
+    let audioCtx;
+    let localAnalyser;
+    let audioDataArray; 
+
+    const peers = {}; // { peerId: { pc, name, iceQueue, audioEl, volume, analyser } }
+    let isMuted = false;
+
+    // UI Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const joinBtn = document.getElementById('joinBtn');
+    const statusText = document.getElementById('statusText');
+    const participantsList = document.getElementById('participants');
+    
+    const chatHistory = document.getElementById('chatHistory');
+    const chatInput = document.getElementById('chatInput');
+    const sendChatBtn = document.getElementById('sendChatBtn');
+
+    // Threshold UI
+    const micThreshold = document.getElementById('micThreshold');
+    const thresholdVal = document.getElementById('thresholdVal');
+    micThreshold.addEventListener('input', () => {
+        thresholdVal.innerText = micThreshold.value;
+    });
+
+    // --- JOIN ROOM ---
+    joinBtn.onclick = async () => {
+        myName = document.getElementById('userName').value.trim() || "Anonymous";
+        const roomId = document.getElementById('roomId').value.trim();
+        if (!roomId) return alert('Please enter a Room Name.');
+
+        roomTopic = `wrtc-mesh-voice-room-${roomId}`;
+        statusText.style.display = 'block';
+        joinBtn.disabled = true;
+
+        try {
+            // Get Mic Access with High Quality Noise Cancellation
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }, 
+                video: false 
+            });
+            
+            // --- Init Web Audio API for Voice Isolation & Meters ---
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const localSource = audioCtx.createMediaStreamSource(localStream);
+            
+            // 1. Highpass Filter: Removes low desk rumbles/thumps (below 85Hz)
+            const highpass = audioCtx.createBiquadFilter();
+            highpass.type = "highpass";
+            highpass.frequency.value = 85; 
+
+            // 2. Lowpass Filter: Removes sharp, high-frequency keyboard clacks (above 4000Hz)
+            const lowpass = audioCtx.createBiquadFilter();
+            lowpass.type = "lowpass";
+            lowpass.frequency.value = 4000;
+
+            // 3. Destination: The isolated vocal audio we will actually send to peers
+            const destination = audioCtx.createMediaStreamDestination();
+            rtcStream = destination.stream;
+
+            // 4. Analyser: Reads the filtered vocal volume for the visual meter and Noise Gate
+            localAnalyser = audioCtx.createAnalyser();
+            localAnalyser.fftSize = 256; 
+            audioDataArray = new Uint8Array(localAnalyser.frequencyBinCount);
+
+            // Connect the audio processing graph: Mic -> Highpass -> Lowpass -> Destination & Analyser
+            localSource.connect(highpass);
+            highpass.connect(lowpass);
+            lowpass.connect(localAnalyser);
+            lowpass.connect(destination);
+            
+            requestAnimationFrame(updateMeters);
+
+            // Connect to Signaling Broker
+            statusText.innerText = "Connecting to broker...";
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+            mqttClient.on('connect', () => {
+                mqttClient.subscribe(roomTopic);
+                sendMsg({ type: 'hello', name: myName });
+                
+                document.getElementById('roomTitle').innerText = `Room: ${roomId}`;
+                setupScreen.style.display = 'none';
+                chatScreen.style.display = 'block';
+                updateUI();
+                appendSystemMessage("You joined the room.");
+            });
+
+            mqttClient.on('message', async (topic, payload) => {
+                const msg = JSON.parse(payload.toString());
+                
+                if (msg.type === 'chat') {
+                    if (msg.from !== myId) appendChatMessage(msg.name, msg.text, false);
+                    return;
+                }
+
+                if (msg.from === myId) return;
+                if (msg.to && msg.to !== myId) return;
+
+                if (msg.type === 'hello') {
+                    appendSystemMessage(`${msg.name} joined.`);
+                    sendMsg({ type: 'welcome', to: msg.from, name: myName });
+                    setupPeer(msg.from, msg.name, myId > msg.from);
+                } 
+                else if (msg.type === 'welcome') {
+                    setupPeer(msg.from, msg.name, myId > msg.from);
+                } 
+                else if (msg.type === 'offer') {
+                    const p = setupPeer(msg.from, msg.name, false);
+                    await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                    flushIceQueue(msg.from);
+                    const answer = await p.pc.createAnswer();
+                    await p.pc.setLocalDescription(answer);
+                    sendMsg({ type: 'answer', to: msg.from, sdp: p.pc.localDescription });
+                } 
+                else if (msg.type === 'answer') {
+                    const p = setupPeer(msg.from, msg.name, false);
+                    await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                    flushIceQueue(msg.from);
+                } 
+                else if (msg.type === 'ice') {
+                    const p = setupPeer(msg.from, msg.name, false);
+                    if (p.pc.remoteDescription && p.pc.remoteDescription.type) {
+                        await p.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                    } else {
+                        p.iceQueue.push(msg.candidate);
+                    }
+                } 
+                else if (msg.type === 'leave') {
+                    appendSystemMessage(`${peers[msg.from]?.name || 'Someone'} left.`);
+                    removePeer(msg.from);
+                }
+            });
+
+        } catch (err) {
+            console.error(err);
+            alert("Could not start. Make sure microphone permissions are granted AND you are using HTTPS.");
+            joinBtn.disabled = false;
+            statusText.style.display = 'none';
+        }
+    };
+
+    // --- WEBRTC LOGIC ---
+    function setupPeer(id, name, isInitiator) {
+        if (peers[id]) {
+            if (name) peers[id].name = name;
+            return peers[id];
+        }
+
+        const pc = new RTCPeerConnection(rtcConfig);
+        peers[id] = { pc, name: name || 'Unknown', iceQueue:[], volume: 1.0, analyser: null };
+
+        // Attach the rtcStream (filtered vocal range), not the localStream directly
+        rtcStream.getTracks().forEach(track => pc.addTrack(track, rtcStream));
+
+        const audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        document.getElementById('audio-container').appendChild(audioEl);
+        peers[id].audioEl = audioEl;
+
+        pc.ontrack = event => {
+            if (audioEl.srcObject !== event.streams[0]) {
+                audioEl.srcObject = event.streams[0];
+                
+                try {
+                    const remoteSource = audioCtx.createMediaStreamSource(event.streams[0]);
+                    const remoteAnalyser = audioCtx.createAnalyser();
+                    remoteAnalyser.fftSize = 256;
+                    remoteSource.connect(remoteAnalyser);
+                    peers[id].analyser = remoteAnalyser;
+                } catch (e) {
+                    console.log("Could not attach analyser to remote stream", e);
+                }
+            }
+        };
+
+        pc.onicecandidate = event => {
+            if (event.candidate) sendMsg({ type: 'ice', to: id, candidate: event.candidate });
+        };
+
+        pc.onconnectionstatechange = () => {
+            updateUI();
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                removePeer(id);
+            }
+        };
+
+        if (isInitiator) {
+            pc.createOffer()
+              .then(offer => pc.setLocalDescription(offer))
+              .then(() => sendMsg({ type: 'offer', to: id, sdp: pc.localDescription }));
+        }
+
+        updateUI();
+        return peers[id];
+    }
+
+    function flushIceQueue(id) {
+        const p = peers[id];
+        if (p && p.iceQueue.length > 0) {
+            p.iceQueue.forEach(candidate => p.pc.addIceCandidate(new RTCIceCandidate(candidate)));
+            p.iceQueue =[];
+        }
+    }
+
+    function removePeer(id) {
+        if (peers[id]) {
+            peers[id].pc.close();
+            if (peers[id].audioEl) peers[id].audioEl.remove();
+            delete peers[id];
+            updateUI();
+        }
+    }
+
+    function sendMsg(msgObj) {
+        msgObj.from = myId;
+        mqttClient.publish(roomTopic, JSON.stringify(msgObj));
+    }
+
+    // --- AUDIO VISUALIZATION & NOISE GATE LOOP ---
+    function updateMeters() {
+        if (!audioCtx) return;
+
+        function getVolumePercentage(analyser) {
+            if (!analyser) return 0;
+            analyser.getByteFrequencyData(audioDataArray);
+            let sum = 0;
+            for (let i = 0; i < audioDataArray.length; i++) {
+                sum += audioDataArray[i];
+            }
+            const average = sum / audioDataArray.length;
+            return Math.min(100, (average / 100) * 100); 
+        }
+
+        // Calculate Local Volume
+        const localVol = getVolumePercentage(localAnalyser);
+        
+        // --- Noise Gate Threshold ---
+        const threshold = parseFloat(micThreshold.value);
+        if (localVol >= threshold) {
+            lastSpeakTime = Date.now();
+        }
+        
+        // Hold mic open for 1 second after volume drops (prevents stuttering)
+        const isSpeaking = (Date.now() - lastSpeakTime) < 1000;
+        
+        // Apply muting to the rtcStream outgoing tracks
+        if (rtcStream && !isMuted) {
+            rtcStream.getAudioTracks()[0].enabled = isSpeaking;
+        } else if (rtcStream && isMuted) {
+            rtcStream.getAudioTracks()[0].enabled = false;
+        }
+
+        // Update Local Visual Meter
+        const localMeter = document.getElementById('meter-local');
+        if (localMeter) {
+            localMeter.style.width = localVol + '%';
+            
+            // Color feedback (Red = Manually Muted, Gray = Blocked by Gate, Green = Active)
+            if (isMuted) {
+                localMeter.style.background = '#dc3545';
+            } else if (!isSpeaking) {
+                localMeter.style.background = '#6c757d';
+            } else {
+                localMeter.style.background = '#198754';
+            }
+        }
+
+        // Update Peer Meters
+        Object.keys(peers).forEach(id => {
+            const peerMeter = document.getElementById(`meter-${id}`);
+            if (peerMeter && peers[id].analyser) {
+                peerMeter.style.width = getVolumePercentage(peers[id].analyser) + '%';
+            }
+        });
+
+        requestAnimationFrame(updateMeters);
+    }
+
+    // --- UI UPDATES & AUDIO CONTROLS ---
+    function updateUI() {
+        participantsList.innerHTML = `
+            <li>
+                <div class="peer-header">
+                    <strong>${myName} (You)</strong>
+                    <span class="status-badge connected">Active</span>
+                </div>
+                <div class="meter-bg">
+                    <div class="meter-fill local" id="meter-local"></div>
+                </div>
+            </li>
+        `;
+        
+        Object.keys(peers).forEach(id => {
+            const peer = peers[id];
+            const state = peer.pc.connectionState;
+            const isConnected = state === 'connected';
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="peer-header">
+                    <span>${peer.name}</span>
+                    <span class="status-badge ${isConnected ? 'connected' : ''}">${state || 'connecting...'}</span>
+                </div>
+                <div class="meter-bg" style="display: ${isConnected ? 'block' : 'none'};">
+                    <div class="meter-fill" id="meter-${id}"></div>
+                </div>
+                <div class="controls-row" style="display: ${isConnected ? 'flex' : 'none'};">
+                    <div class="volume-slider-container">
+                        <span>🔊</span>
+                        <input type="range" min="0" max="1" step="0.01" value="${peer.volume}" class="vol-slider" data-id="${id}">
+                    </div>
+                </div>
+            `;
+            participantsList.appendChild(li);
+        });
+
+        document.querySelectorAll('.vol-slider').forEach(slider => {
+            slider.addEventListener('input', (e) => {
+                const id = e.target.getAttribute('data-id');
+                const vol = parseFloat(e.target.value);
+                if (peers[id]) {
+                    peers[id].volume = vol; 
+                    if (peers[id].audioEl) peers[id].audioEl.volume = vol; 
+                }
+            });
+        });
+    }
+
+    // --- TEXT CHAT LOGIC ---
+    function appendChatMessage(name, text, isSelf) {
+        const div = document.createElement('div');
+        div.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+        
+        const nameEl = document.createElement('strong');
+        nameEl.innerText = isSelf ? "You" : name;
+        const textNode = document.createTextNode(text);
+        
+        div.appendChild(nameEl);
+        div.appendChild(textNode);
+        
+        chatHistory.appendChild(div);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function appendSystemMessage(text) {
+        const div = document.createElement('div');
+        div.style = "text-align: center; font-size: 12px; color: #888; margin: 4px 0;";
+        div.innerText = text;
+        chatHistory.appendChild(div);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    sendChatBtn.onclick = () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        
+        appendChatMessage(myName, text, true);
+        sendMsg({ type: 'chat', name: myName, text: text });
+        chatInput.value = '';
+    };
+
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendChatBtn.click();
+    });
+
+    // --- MUTE & LEAVE CONTROLS ---
+    document.getElementById('muteBtn').onclick = (e) => {
+        isMuted = !isMuted;
+        
+        // Disable the original stream so analyser reads '0' and the red visual effect triggers
+        localStream.getAudioTracks()[0].enabled = !isMuted;
+        
+        e.target.innerText = isMuted ? "Unmute My Mic" : "Mute My Mic";
+        e.target.className = isMuted ? "btn-danger" : "btn-success";
+    };
+
+    const disconnect = () => {
+        if (mqttClient) {
+            sendMsg({ type: 'leave' });
+            mqttClient.end();
+        }
+        Object.keys(peers).forEach(id => removePeer(id));
+        if (localStream) localStream.getTracks().forEach(track => track.stop());
+        if (rtcStream) rtcStream.getTracks().forEach(track => track.stop());
+        if (audioCtx) audioCtx.close();
+        location.reload();
+    };
+
+    document.getElementById('leaveBtn').onclick = disconnect;
+    window.addEventListener('beforeunload', disconnect);
+
+</script>
 </body>
 </html>
