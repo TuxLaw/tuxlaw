@@ -11,21 +11,36 @@
             background-color: #121212;
             color: #e0e0e0;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             display: flex;
             justify-content: center;
+            height: 100vh;
             color-scheme: dark;
+            box-sizing: border-box;
         }
         .container {
             max-width: 900px;
             width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
         }
         .card {
             background: #1e1e1e;
-            padding: 2rem;
+            padding: 1.5rem;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
+        
+        #setup-screen {
+            margin: auto 0; /* Centers it vertically on initial load */
+        }
+
         h1, h2, h3 { margin-top: 0; color: #64b5f6; }
         
         /* Setup Screen Constraints */
@@ -70,13 +85,17 @@
         .btn-sm { padding: 6px 12px; font-size: 12px; }
 
         /* Layout for Chat Screen */
-        #chat-screen { display: none; }
+        #chat-screen {
+            display: none; /* Changed to flex via JS when active */
+            flex: 1;
+        }
+        
         .header-controls {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 20px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
             border-bottom: 1px solid #333;
             flex-wrap: wrap;
             gap: 15px;
@@ -86,20 +105,42 @@
             gap: 10px;
             align-items: center;
         }
-        .main-layout {
+
+        /* Tabs Navigation */
+        .tabs {
             display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
         }
+        .tab-btn {
+            flex: 1;
+            background-color: #333;
+            color: #aaa;
+            padding: 12px;
+        }
+        .tab-btn:hover { background-color: #444; }
+        .tab-btn.active { background-color: #1976d2; color: #fff; }
+        .tab-btn.active:hover { background-color: #1565c0; }
+
+        .main-layout {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Required for nested scroll areas */
+        }
+        
         .panel {
             flex: 1;
-            min-width: 300px;
             background: #232323;
             border: 1px solid #333;
             border-radius: 8px;
             padding: 15px;
-            display: flex;
+            display: none; /* Hidden by default */
             flex-direction: column;
+            overflow: hidden;
+        }
+        .panel.active {
+            display: flex;
         }
 
         /* Participant List & Volume */
@@ -107,6 +148,8 @@
             padding: 0;
             margin: 0;
             list-style: none;
+            overflow-y: auto;
+            flex: 1;
         }
         .participant-list li {
             padding: 12px;
@@ -172,12 +215,10 @@
             width: 0%;
             transition: width 0.05s ease-out, background-color 0.2s ease;
         }
-        .meter-fill.local { background: #4caf50; }
 
         /* Text Chat */
         #chatHistory {
             flex: 1;
-            height: 300px;
             overflow-y: auto;
             background: #2c2c2c;
             border: 1px solid #444;
@@ -233,25 +274,30 @@
             <div class="header-buttons">
                 <button id="joinVoiceBtn" class="btn-success">Join Voice</button>
                 <button id="muteBtn" class="btn-success" style="display: none;">Mute My Mic</button>
-                <button id="leaveBtn" class="btn-danger">Leave</button>
+                <button id="leaveBtn" class="btn-danger">Leave Room</button>
             </div>
         </div>
 
-        <div class="main-layout">
-            <div class="panel">
-                <h3>Participants & Audio</h3>
-                <ul id="participants" class="participant-list">
-                    <!-- Peers inject here -->
-                </ul>
-            </div>
+        <div class="tabs">
+            <button id="tab-text" class="tab-btn active">Text Chat</button>
+            <button id="tab-voice" class="tab-btn">Voice Audio & Peers</button>
+        </div>
 
-            <div class="panel">
-                <h3>Text Chat</h3>
+        <div class="main-layout">
+            <!-- Text Chat Panel -->
+            <div id="panel-text" class="panel active">
                 <div id="chatHistory"></div>
                 <div class="chat-input-row">
                     <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
                     <button id="sendChatBtn">Send</button>
                 </div>
+            </div>
+
+            <!-- Voice Panel -->
+            <div id="panel-voice" class="panel">
+                <ul id="participants" class="participant-list">
+                    <!-- Peers inject here -->
+                </ul>
             </div>
         </div>
     </div>
@@ -270,11 +316,11 @@
 
     // Core State
     let inVoice = false;
-    let userIntendedMute = false; // The local user's preference for muting
-    const globallyMutedBy = new Set(); // Stores peer IDs of users who forced a mute on this user
-    const peers = {}; // { peerId: { name, inVoice, globalMuteActive, pc, audioEl, analyser, volume, iceQueue } }
+    let userIntendedMute = false;
+    const globallyMutedBy = new Set();
+    const peers = {}; 
 
-    // Web Audio API Elements (Only used for drawing the visual UI volume meters)
+    // Web Audio API Elements
     let audioCtx;
     let localAnalyser;
     let audioDataArray;
@@ -291,6 +337,31 @@
     const chatHistory = document.getElementById('chatHistory');
     const chatInput = document.getElementById('chatInput');
     const sendChatBtn = document.getElementById('sendChatBtn');
+
+    // Tabs UI Elements
+    const tabText = document.getElementById('tab-text');
+    const tabVoice = document.getElementById('tab-voice');
+    const panelText = document.getElementById('panel-text');
+    const panelVoice = document.getElementById('panel-voice');
+
+    // --- TAB SWITCHING LOGIC ---
+    function switchTab(tab) {
+        if (tab === 'text') {
+            tabText.classList.add('active');
+            tabVoice.classList.remove('active');
+            panelText.classList.add('active');
+            panelVoice.classList.remove('active');
+            // Ensure scrolled to bottom if returning to text view
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        } else {
+            tabVoice.classList.add('active');
+            tabText.classList.remove('active');
+            panelVoice.classList.add('active');
+            panelText.classList.remove('active');
+        }
+    }
+    tabText.onclick = () => switchTab('text');
+    tabVoice.onclick = () => switchTab('voice');
 
     // --- URL ROOM HANDLING ---
     window.addEventListener('load', () => {
@@ -309,16 +380,14 @@
         const track = localStream.getAudioTracks()[0];
         if (!track) return;
 
-        // If at least one peer has enforced a mute, the mic MUST be muted locally.
         const isForcedMuted = globallyMutedBy.size > 0;
         
         if (isForcedMuted) {
             track.enabled = false;
             muteBtn.innerText = "Locked by Peer";
             muteBtn.className = "btn-danger";
-            muteBtn.disabled = true; // Prevents the user from unmuting themselves
+            muteBtn.disabled = true;
         } else {
-            // Restore to the user's intended state
             track.enabled = !userIntendedMute;
             muteBtn.disabled = false;
             muteBtn.innerText = userIntendedMute ? "Unmute My Mic" : "Mute My Mic";
@@ -327,7 +396,7 @@
     }
 
     muteBtn.onclick = () => {
-        if (globallyMutedBy.size > 0) return; // Prevent clicking if locked (fallback to HTML 'disabled')
+        if (globallyMutedBy.size > 0) return;
         userIntendedMute = !userIntendedMute;
         applyMicState();
     };
@@ -342,7 +411,6 @@
         statusText.style.display = 'block';
         joinBtn.disabled = true;
 
-        // Connect to Signaling Broker directly for text (No Mic permission yet)
         mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
         mqttClient.on('connect', () => {
@@ -351,9 +419,9 @@
 
             document.getElementById('roomTitle').innerText = `Room: ${roomId}`;
             setupScreen.style.display = 'none';
-            chatScreen.style.display = 'block';
+            chatScreen.style.display = 'flex'; // Changed to flex for 100vh layout 
             updateUI();
-            appendSystemMessage("You joined the text chat.");
+            appendSystemMessage("You joined the room text chat.");
         });
 
         mqttClient.on('message', async (topic, payload) => {
@@ -364,10 +432,9 @@
                 return;
             }
 
-            if (msg.from === myId) return; // Ignore my own signals
-            if (msg.to && msg.to !== myId) return; // Ignore messages directed at others
+            if (msg.from === myId) return;
+            if (msg.to && msg.to !== myId) return;
 
-            // Handle Text Presence
             if (msg.type === 'hello') {
                 peers[msg.from] = { name: msg.name, inVoice: msg.inVoice, globalMuteActive: false };
                 sendMsg({ type: 'welcome', to: msg.from, name: myName, inVoice: inVoice });
@@ -379,14 +446,12 @@
                 peers[msg.from].inVoice = peers[msg.from].inVoice || msg.inVoice;
                 updateUI();
             }
-            // Handle Voice Presence
             else if (msg.type === 'voice_join') {
                 if (peers[msg.from]) peers[msg.from].inVoice = true;
                 appendSystemMessage(`${msg.name || 'Someone'} connected to voice.`);
                 updateUI();
 
                 if (inVoice) {
-                    // Tie-breaker to prevent double WebRTC offers
                     if (myId > msg.from) {
                         setupPeer(msg.from, msg.name, true); 
                     } else {
@@ -401,7 +466,6 @@
                     setupPeer(msg.from, msg.name, true);
                 }
             }
-            // Handle WebRTC Setup
             else if (msg.type === 'offer') {
                 const p = setupPeer(msg.from, msg.name, false);
                 await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -423,7 +487,6 @@
                     p.iceQueue.push(msg.candidate);
                 }
             }
-            // Handle Global Mute Locks
             else if (msg.type === 'global_mute' && msg.target === myId) {
                 if (inVoice) {
                     globallyMutedBy.add(msg.from);
@@ -440,7 +503,6 @@
                     applyMicState();
                 }
             }
-            // Handle Leaving
             else if (msg.type === 'leave') {
                 appendSystemMessage(`${peers[msg.from]?.name || 'Someone'} left.`);
                 removePeer(msg.from);
@@ -456,7 +518,6 @@
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             
-            // Set up meter loop
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const localSource = audioCtx.createMediaStreamSource(localStream);
             localAnalyser = audioCtx.createAnalyser();
@@ -474,6 +535,9 @@
             sendMsg({ type: 'voice_join', name: myName });
             updateUI();
             appendSystemMessage("You joined the voice channel.");
+            
+            // Switch to Voice Tab automatically for UX
+            switchTab('voice');
 
         } catch (err) {
             console.error(err);
@@ -556,7 +620,6 @@
             if (peers[id].pc) peers[id].pc.close();
             if (peers[id].audioEl) peers[id].audioEl.remove();
             
-            // Release any mute lock this leaving user held on us
             if (globallyMutedBy.has(id)) {
                 globallyMutedBy.delete(id);
                 applyMicState();
@@ -572,7 +635,6 @@
         if (mqttClient) mqttClient.publish(roomTopic, JSON.stringify(msgObj));
     }
 
-    // --- GLOBAL MUTE FUNCTION ---
     window.toggleGlobalMute = function(targetId) {
         if (!peers[targetId]) return;
         
@@ -673,7 +735,6 @@
 
         participantsList.innerHTML = html;
 
-        // Reattach volume slider listeners dynamically
         document.querySelectorAll('.vol-slider').forEach(slider => {
             slider.addEventListener('input', (e) => {
                 const id = e.target.getAttribute('data-id');
@@ -687,20 +748,30 @@
     }
 
     // --- TEXT CHAT LOGIC ---
+    function appendElementWithSmartScroll(el) {
+        // Detect if user is currently scrolled near the bottom (allow 50px of leniency)
+        const isAtBottom = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight <= 50;
+        
+        chatHistory.appendChild(el);
+        
+        // Auto scroll if they were already at the bottom
+        if (isAtBottom) {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    }
+
     function appendChatMessage(name, text, isSelf) {
         const div = document.createElement('div');
         div.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
         div.innerHTML = `<strong>${isSelf ? "You" : name}</strong>${text}`;
-        chatHistory.appendChild(div);
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        appendElementWithSmartScroll(div);
     }
 
     function appendSystemMessage(text) {
         const div = document.createElement('div');
         div.style = "text-align: center; font-size: 12px; color: #888; margin: 4px 0;";
         div.innerText = text;
-        chatHistory.appendChild(div);
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        appendElementWithSmartScroll(div);
     }
 
     sendChatBtn.onclick = () => {
@@ -709,6 +780,9 @@
         appendChatMessage(myName, text, true);
         sendMsg({ type: 'chat', name: myName, text: text });
         chatInput.value = '';
+        
+        // Force scroll to bottom when the local user sends a message
+        chatHistory.scrollTop = chatHistory.scrollHeight;
     };
 
     chatInput.addEventListener('keypress', (e) => {
