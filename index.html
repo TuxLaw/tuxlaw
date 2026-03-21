@@ -209,12 +209,27 @@
             <div class="panel">
                 <h3>Participants & Audio</h3>
                 
-                <!-- Noise Gate Threshold Controls -->
+                <!-- Noise Gate & Isolation Threshold Controls -->
                 <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
                     <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">
                         Activation Threshold: <span id="thresholdVal">10</span>%
                     </label>
                     <input type="range" id="micThreshold" min="0" max="100" value="10" style="width: 100%;">
+
+                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
+                        Voice Min Freq: <span id="minFreqVal">90</span> Hz
+                    </label>
+                    <input type="range" id="minFreq" min="20" max="500" value="90" style="width: 100%;">
+
+                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
+                        Voice Max Freq: <span id="maxFreqVal">1500</span> Hz
+                    </label>
+                    <input type="range" id="maxFreq" min="500" max="8000" value="1500" style="width: 100%;">
+
+                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
+                        Hold Time: <span id="holdTimeVal">1000</span> ms
+                    </label>
+                    <input type="range" id="holdTime" min="0" max="3000" value="1000" step="50" style="width: 100%;">
                 </div>
 
                 <ul id="participants" class="participant-list">
@@ -265,12 +280,22 @@
     const chatInput = document.getElementById('chatInput');
     const sendChatBtn = document.getElementById('sendChatBtn');
 
-    // Threshold UI
+    // Threshold & Isolation UI
     const micThreshold = document.getElementById('micThreshold');
     const thresholdVal = document.getElementById('thresholdVal');
-    micThreshold.addEventListener('input', () => {
-        thresholdVal.innerText = micThreshold.value;
-    });
+    micThreshold.addEventListener('input', () => { thresholdVal.innerText = micThreshold.value; });
+
+    const minFreq = document.getElementById('minFreq');
+    const minFreqVal = document.getElementById('minFreqVal');
+    minFreq.addEventListener('input', () => { minFreqVal.innerText = minFreq.value; });
+
+    const maxFreq = document.getElementById('maxFreq');
+    const maxFreqVal = document.getElementById('maxFreqVal');
+    maxFreq.addEventListener('input', () => { maxFreqVal.innerText = maxFreq.value; });
+
+    const holdTime = document.getElementById('holdTime');
+    const holdTimeVal = document.getElementById('holdTimeVal');
+    holdTime.addEventListener('input', () => { holdTimeVal.innerText = holdTime.value; });
 
     // --- JOIN ROOM ---
     joinBtn.onclick = async () => {
@@ -463,22 +488,34 @@
         
         let voiceEnergy = 0;
 
-        // Bins 1-16 (Approx 90Hz to 1500Hz) - Core frequencies of human speech
-        for (let i = 1; i <= 16; i++) voiceEnergy += audioDataArray[i];
-        let voiceAvg = voiceEnergy / 16;
+        // Dynamically calculate frequency bin mappings based on UI slider settings
+        const binWidth = audioCtx.sampleRate / localAnalyser.fftSize;
+        const startBin = Math.max(1, Math.floor(parseFloat(minFreq.value) / binWidth));
+        const endBin = Math.min(localAnalyser.frequencyBinCount - 1, Math.floor(parseFloat(maxFreq.value) / binWidth));
+
+        let count = 0;
+        if (startBin <= endBin) {
+            for (let i = startBin; i <= endBin; i++) {
+                voiceEnergy += audioDataArray[i];
+                count++;
+            }
+        }
+        
+        let voiceAvg = count > 0 ? (voiceEnergy / count) : 0;
 
         // Base percentage strictly off isolated human voice frequencies
         const localVol = Math.min(100, (voiceAvg / 255) * 100);
         
         const threshold = parseFloat(micThreshold.value);
+        const holdMs = parseInt(holdTime.value);
         
         // VAD LOGIC: Activation threshold works ONLY on the isolated voice volume
         if (localVol >= threshold) {
             lastSpeakTime = Date.now();
         }
         
-        // Hold mic open for 1 second after volume drops (prevents stuttering)
-        const isSpeaking = (Date.now() - lastSpeakTime) < 1000;
+        // Hold mic open for calculated hold time after volume drops (prevents stuttering)
+        const isSpeaking = (Date.now() - lastSpeakTime) < holdMs;
         
         // Apply muting to the localStream outgoing tracks
         if (localStream && !isMuted) {
