@@ -270,8 +270,9 @@
 
     // Core State
     let inVoice = false;
-    let isMuted = false;
-    const peers = {}; // { peerId: { name, inVoice, pc, audioEl, analyser, volume, iceQueue } }
+    let userIntendedMute = false; // The local user's preference for muting
+    const globallyMutedBy = new Set(); // Stores peer IDs of users who forced a mute on this user
+    const peers = {}; // { peerId: { name, inVoice, globalMuteActive, pc, audioEl, analyser, volume, iceQueue } }
 
     // Web Audio API Elements (Only used for drawing the visual UI volume meters)
     let audioCtx;
@@ -301,6 +302,35 @@
         const val = roomIdInput.value.trim();
         window.history.replaceState(null, null, val ? "#" + encodeURIComponent(val) : window.location.pathname + window.location.search);
     });
+
+    // --- MIC HARDWARE LOGIC ---
+    function applyMicState() {
+        if (!localStream) return;
+        const track = localStream.getAudioTracks()[0];
+        if (!track) return;
+
+        // If at least one peer has enforced a mute, the mic MUST be muted locally.
+        const isForcedMuted = globallyMutedBy.size > 0;
+        
+        if (isForcedMuted) {
+            track.enabled = false;
+            muteBtn.innerText = "Locked by Peer";
+            muteBtn.className = "btn-danger";
+            muteBtn.disabled = true; // Prevents the user from unmuting themselves
+        } else {
+            // Restore to the user's intended state
+            track.enabled = !userIntendedMute;
+            muteBtn.disabled = false;
+            muteBtn.innerText = userIntendedMute ? "Unmute My Mic" : "Mute My Mic";
+            muteBtn.className = userIntendedMute ? "btn-danger" : "btn-success";
+        }
+    }
+
+    muteBtn.onclick = () => {
+        if (globallyMutedBy.size > 0) return; // Prevent clicking if locked (fallback to HTML 'disabled')
+        userIntendedMute = !userIntendedMute;
+        applyMicState();
+    };
 
     // --- 1. JOIN TEXT CHAT ---
     joinBtn.onclick = () => {
@@ -339,13 +369,13 @@
 
             // Handle Text Presence
             if (msg.type === 'hello') {
-                peers[msg.from] = { name: msg.name, inVoice: msg.inVoice };
+                peers[msg.from] = { name: msg.name, inVoice: msg.inVoice, globalMuteActive: false };
                 sendMsg({ type: 'welcome', to: msg.from, name: myName, inVoice: inVoice });
                 appendSystemMessage(`${msg.name} joined the room.`);
                 updateUI();
             }
             else if (msg.type === 'welcome') {
-                if (!peers[msg.from]) peers[msg.from] = { name: msg.name };
+                if (!peers[msg.from]) peers[msg.from] = { name: msg.name, globalMuteActive: false };
                 peers[msg.from].inVoice = peers[msg.from].inVoice || msg.inVoice;
                 updateUI();
             }
@@ -393,13 +423,21 @@
                     p.iceQueue.push(msg.candidate);
                 }
             }
-            // Handle Global Mute
-            else if (msg.type === 'global_mute') {
-                if (msg.target === myId) {
-                    if (inVoice && !isMuted) {
-                        toggleMute();
-                        appendSystemMessage("You were globally muted by a peer.");
+            // Handle Global Mute Locks
+            else if (msg.type === 'global_mute' && msg.target === myId) {
+                if (inVoice) {
+                    globallyMutedBy.add(msg.from);
+                    appendSystemMessage(`You were muted by ${peers[msg.from]?.name || 'a peer'}.`);
+                    applyMicState();
+                }
+            }
+            else if (msg.type === 'global_unmute' && msg.target === myId) {
+                if (inVoice) {
+                    globallyMutedBy.delete(msg.from);
+                    if (globallyMutedBy.size === 0) {
+                        appendSystemMessage(`Your mic was unlocked by ${peers[msg.from]?.name || 'a peer'}.`);
                     }
+                    applyMicState();
                 }
             }
             // Handle Leaving
@@ -430,6 +468,8 @@
             inVoice = true;
             joinVoiceBtn.style.display = 'none';
             muteBtn.style.display = 'block';
+            
+            applyMicState();
 
             sendMsg({ type: 'voice_join', name: myName });
             updateUI();
@@ -445,14 +485,14 @@
 
     // --- WEBRTC LOGIC ---
     function setupPeer(id, name, isInitiator) {
-        if (!peers[id]) peers[id] = { name: name || 'Unknown' };
+        if (!peers[id]) peers[id] = { name: name || 'Unknown', globalMuteActive: false };
         peers[id].inVoice = true; 
 
         if (peers[id].pc) return peers[id];
 
         const pc = new RTCPeerConnection(rtcConfig);
         peers[id].pc = pc;
-        peers[id].iceQueue = [];
+        peers[id].iceQueue =[];
         peers[id].volume = 1.0;
 
         if (localStream) {
@@ -515,6 +555,13 @@
         if (peers[id]) {
             if (peers[id].pc) peers[id].pc.close();
             if (peers[id].audioEl) peers[id].audioEl.remove();
+            
+            // Release any mute lock this leaving user held on us
+            if (globallyMutedBy.has(id)) {
+                globallyMutedBy.delete(id);
+                applyMicState();
+            }
+
             delete peers[id];
             updateUI();
         }
@@ -526,9 +573,21 @@
     }
 
     // --- GLOBAL MUTE FUNCTION ---
-    window.sendGlobalMute = function(targetId) {
-        sendMsg({ type: 'global_mute', target: targetId });
-        appendSystemMessage(`You muted ${peers[targetId]?.name || 'a peer'} for everyone.`);
+    window.toggleGlobalMute = function(targetId) {
+        if (!peers[targetId]) return;
+        
+        peers[targetId].globalMuteActive = !peers[targetId].globalMuteActive;
+        const isMuting = peers[targetId].globalMuteActive;
+
+        if (isMuting) {
+            sendMsg({ type: 'global_mute', target: targetId });
+            appendSystemMessage(`You muted ${peers[targetId].name} for everyone.`);
+        } else {
+            sendMsg({ type: 'global_unmute', target: targetId });
+            appendSystemMessage(`You unmuted ${peers[targetId].name}.`);
+        }
+        
+        updateUI();
     };
 
     // --- VISUAL UI METERS LOOP ---
@@ -538,12 +597,14 @@
         localAnalyser.getByteFrequencyData(audioDataArray);
         let sum = 0;
         for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
-        let localVol = Math.min(100, ((sum / audioDataArray.length) / 255) * 100);
+        
+        const isLocallySilent = userIntendedMute || globallyMutedBy.size > 0;
+        const localVol = Math.min(100, ((sum / audioDataArray.length) / 255) * 100);
 
         const localMeter = document.getElementById('meter-local');
         if (localMeter) {
-            localMeter.style.width = localVol + '%';
-            localMeter.style.background = isMuted ? '#d32f2f' : '#4caf50';
+            localMeter.style.width = (isLocallySilent ? 0 : localVol) + '%';
+            localMeter.style.background = isLocallySilent ? '#d32f2f' : '#4caf50';
         }
 
         Object.keys(peers).forEach(id => {
@@ -581,6 +642,7 @@
             const isConnected = peer.pc && peer.pc.connectionState === 'connected';
             const badgeText = peer.inVoice ? (isConnected ? 'Voice Active' : 'Connecting...') : 'Text Only';
             const badgeClass = peer.inVoice && isConnected ? 'voice' : '';
+            const isMutedByMe = peer.globalMuteActive;
 
             html += `
                 <li>
@@ -600,7 +662,9 @@
                             <span>🔊</span>
                             <input type="range" min="0" max="1" step="0.01" value="${peer.volume}" class="vol-slider" data-id="${id}">
                         </div>
-                        <button class="btn-danger btn-sm" onclick="sendGlobalMute('${id}')">Mute for All</button>
+                        <button class="${isMutedByMe ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleGlobalMute('${id}')">
+                            ${isMutedByMe ? 'Unmute for All' : 'Mute for All'}
+                        </button>
                     </div>
                     ` : ''}
                 </li>
@@ -650,18 +714,6 @@
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendChatBtn.click();
     });
-
-    // --- LOCAL MUTE & LEAVE CONTROLS ---
-    function toggleMute() {
-        isMuted = !isMuted;
-        muteBtn.innerText = isMuted ? "Unmute My Mic" : "Mute My Mic";
-        muteBtn.className = isMuted ? "btn-danger" : "btn-success";
-        if (localStream && localStream.getAudioTracks().length > 0) {
-            localStream.getAudioTracks()[0].enabled = !isMuted;
-        }
-    }
-
-    muteBtn.onclick = toggleMute;
 
     const disconnect = () => {
         if (mqttClient) {
