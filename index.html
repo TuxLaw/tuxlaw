@@ -462,26 +462,18 @@
         localAnalyser.getByteFrequencyData(audioDataArray);
         
         let voiceEnergy = 0;
-        let clickEnergy = 0;
 
         // Bins 1-16 (Approx 90Hz to 1500Hz) - Core frequencies of human speech
         for (let i = 1; i <= 16; i++) voiceEnergy += audioDataArray[i];
         let voiceAvg = voiceEnergy / 16;
 
-        // Bins 26-85 (Approx 2400Hz to 8000Hz) - Harsh keyboard clacks and desk clicks
-        for (let i = 26; i <= 85; i++) clickEnergy += audioDataArray[i];
-        let clickAvg = clickEnergy / 60;
-
-        // Base percentage strictly off human voice frequencies
+        // Base percentage strictly off isolated human voice frequencies
         const localVol = Math.min(100, (voiceAvg / 255) * 100);
         
         const threshold = parseFloat(micThreshold.value);
         
-        // VAD LOGIC: The sound must cross the threshold AND be heavily vocal.
-        // Pure keyboard clicks spike clickAvg heavily, causing this to stay false.
-        const isVoiceDominant = voiceAvg > (clickAvg * 1.2);
-        
-        if (localVol >= threshold && isVoiceDominant) {
+        // VAD LOGIC: Activation threshold works ONLY on the isolated voice volume
+        if (localVol >= threshold) {
             lastSpeakTime = Date.now();
         }
         
