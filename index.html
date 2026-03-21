@@ -273,6 +273,7 @@
     const setupScreen = document.getElementById('setup-screen');
     const chatScreen = document.getElementById('chat-screen');
     const joinBtn = document.getElementById('joinBtn');
+    const roomIdInput = document.getElementById('roomId');
     const statusText = document.getElementById('statusText');
     const participantsList = document.getElementById('participants');
     
@@ -297,10 +298,45 @@
     const holdTimeVal = document.getElementById('holdTimeVal');
     holdTime.addEventListener('input', () => { holdTimeVal.innerText = holdTime.value; });
 
+    // --- NEW: URL ROOM HANDLING ---
+    // Check for room in URL parameters, hash, or pathname on load
+    window.addEventListener('load', () => {
+        const params = new URLSearchParams(window.location.search);
+        let roomName = params.get('room') || window.location.hash.substring(1);
+        
+        // If no direct parameter, extract from the end of the URL path (e.g. /chat/room123)
+        if (!roomName) {
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            const lastPart = pathParts[pathParts.length - 1];
+            if (lastPart && !lastPart.includes('.html')) {
+                roomName = lastPart;
+            }
+        }
+
+        if (roomName) {
+            roomIdInput.value = decodeURIComponent(roomName);
+        }
+    });
+
+    // Update URL as user types the room name
+    roomIdInput.addEventListener('input', () => {
+        const val = roomIdInput.value.trim();
+        const newUrl = new URL(window.location);
+        
+        if (val) {
+            newUrl.searchParams.set('room', val);
+            newUrl.hash = ''; // Clear hash to keep it clean
+        } else {
+            newUrl.searchParams.delete('room');
+        }
+        
+        window.history.replaceState(null, null, newUrl);
+    });
+
     // --- JOIN ROOM ---
     joinBtn.onclick = async () => {
         myName = document.getElementById('userName').value.trim() || "Anonymous";
-        const roomId = document.getElementById('roomId').value.trim();
+        const roomId = roomIdInput.value.trim();
         if (!roomId) return alert('Please enter a Room Name.');
 
         roomTopic = `wrtc-mesh-voice-room-${roomId}`;
