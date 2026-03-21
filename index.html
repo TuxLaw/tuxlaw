@@ -209,7 +209,17 @@
             <div class="panel">
                 <h3>Participants & Audio</h3>
 
-                <!-- Noise Gate & Isolation Threshold Controls -->
+                <!-- Built-In Noise Cancellation Toggles -->
+                <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
+                    <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 8px;">Hardware / Browser Filters</label>
+                    <div style="display: flex; gap: 15px; font-size: 13px; flex-wrap: wrap;">
+                        <label><input type="checkbox" id="echoCancel" checked> Echo Cancel</label>
+                        <label><input type="checkbox" id="noiseSupp" checked> Noise Suppress</label>
+                        <label><input type="checkbox" id="autoGain" checked> Auto Gain</label>
+                    </div>
+                </div>
+
+                <!-- Noise Gate & Bandpass Filter Threshold Controls -->
                 <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
                     <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">
                         Activation Threshold: <span id="thresholdVal">10</span>%
@@ -217,12 +227,12 @@
                     <input type="range" id="micThreshold" min="0" max="100" value="10" style="width: 100%;">
 
                     <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
-                        Voice Min Freq: <span id="minFreqVal">90</span> Hz
+                        Highpass (Min Freq): <span id="minFreqVal">90</span> Hz
                     </label>
                     <input type="range" id="minFreq" min="20" max="500" value="90" style="width: 100%;">
 
                     <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
-                        Voice Max Freq: <span id="maxFreqVal">1500</span> Hz
+                        Lowpass (Max Freq): <span id="maxFreqVal">1500</span> Hz
                     </label>
                     <input type="range" id="maxFreq" min="500" max="8000" value="1500" style="width: 100%;">
 
@@ -255,16 +265,19 @@
     const rtcConfig = { iceServers:[{ urls: 'stun:stun.l.google.com:19302' }] };
 
     let localStream;
+    let processedStream; // The actual bandpass-filtered audio sent to peers
     let mqttClient;
     let myId = Math.random().toString(36).substring(2, 12);
     let myName = '';
     let roomTopic = '';
     let lastSpeakTime = 0;
 
-    // Web Audio API for visual meters and filters
+    // Web Audio API Elements
     let audioCtx;
     let localAnalyser;
     let audioDataArray;
+    let highPassFilter;
+    let lowPassFilter;
 
     const peers = {}; // { peerId: { pc, name, iceQueue, audioEl, volume, analyser } }
     let isMuted = false;
@@ -281,6 +294,27 @@
     const chatInput = document.getElementById('chatInput');
     const sendChatBtn = document.getElementById('sendChatBtn');
 
+    // Built-in Native Filters UI
+    const echoCancel = document.getElementById('echoCancel');
+    const noiseSupp = document.getElementById('noiseSupp');
+    const autoGain = document.getElementById('autoGain');
+
+    const updateNativeAudio = () => {
+        if (!localStream) return;
+        const track = localStream.getAudioTracks()[0];
+        if (track && track.applyConstraints) {
+            track.applyConstraints({
+                echoCancellation: echoCancel.checked,
+                noiseSuppression: noiseSupp.checked,
+                autoGainControl: autoGain.checked
+            }).catch(e => console.warn("Could not apply constraints", e));
+        }
+    };
+
+    echoCancel.addEventListener('change', updateNativeAudio);
+    noiseSupp.addEventListener('change', updateNativeAudio);
+    autoGain.addEventListener('change', updateNativeAudio);
+
     // Threshold & Isolation UI
     const micThreshold = document.getElementById('micThreshold');
     const thresholdVal = document.getElementById('thresholdVal');
@@ -288,11 +322,17 @@
 
     const minFreq = document.getElementById('minFreq');
     const minFreqVal = document.getElementById('minFreqVal');
-    minFreq.addEventListener('input', () => { minFreqVal.innerText = minFreq.value; });
+    minFreq.addEventListener('input', () => { 
+        minFreqVal.innerText = minFreq.value; 
+        if (highPassFilter) highPassFilter.frequency.value = parseFloat(minFreq.value);
+    });
 
     const maxFreq = document.getElementById('maxFreq');
     const maxFreqVal = document.getElementById('maxFreqVal');
-    maxFreq.addEventListener('input', () => { maxFreqVal.innerText = maxFreq.value; });
+    maxFreq.addEventListener('input', () => { 
+        maxFreqVal.innerText = maxFreq.value; 
+        if (lowPassFilter) lowPassFilter.frequency.value = parseFloat(maxFreq.value);
+    });
 
     const holdTime = document.getElementById('holdTime');
     const holdTimeVal = document.getElementById('holdTimeVal');
@@ -326,29 +366,43 @@
         joinBtn.disabled = true;
 
         try {
-            // Get Mic Access with High Quality Noise Cancellation
+            // Get Mic Access taking custom checkboxes into account
             localStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
+                    echoCancellation: echoCancel.checked,
+                    noiseSuppression: noiseSupp.checked,
+                    autoGainControl: autoGain.checked
                 },
                 video: false
             });
 
-            // --- Init Web Audio API for Smart Analyser ---
+            // --- Init Web Audio API for Smart Analyser & Actual Processing ---
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const localSource = audioCtx.createMediaStreamSource(localStream);
 
-            // We clone the track just for the analyser. This ensures the visual meter
-            // keeps working even when we mute the main stream sent to peers.
-            const analyserTrack = localStream.getAudioTracks()[0].clone();
-            const analyserStream = new MediaStream([analyserTrack]);
-            const localSource = audioCtx.createMediaStreamSource(analyserStream);
+            // Audio Filters mapped to Sliders
+            highPassFilter = audioCtx.createBiquadFilter();
+            highPassFilter.type = 'highpass';
+            highPassFilter.frequency.value = parseFloat(minFreq.value);
 
+            lowPassFilter = audioCtx.createBiquadFilter();
+            lowPassFilter.type = 'lowpass';
+            lowPassFilter.frequency.value = parseFloat(maxFreq.value);
+
+            // Analyser for UI Visuals & Smart VAD Gate logic
             localAnalyser = audioCtx.createAnalyser();
             localAnalyser.fftSize = 512;
             audioDataArray = new Uint8Array(localAnalyser.frequencyBinCount);
-            localSource.connect(localAnalyser);
+
+            // Creates the actual processed stream that will be pushed to the peers
+            const rtcDest = audioCtx.createMediaStreamDestination();
+            processedStream = rtcDest.stream;
+
+            // Wire up the audio graph: Mic -> Highpass -> Lowpass -> VAD/Visuals -> Output to peers
+            localSource.connect(highPassFilter);
+            highPassFilter.connect(lowPassFilter);
+            lowPassFilter.connect(localAnalyser);
+            lowPassFilter.connect(rtcDest);
 
             requestAnimationFrame(updateMeters);
 
@@ -431,8 +485,8 @@
         const pc = new RTCPeerConnection(rtcConfig);
         peers[id] = { pc, name: name || 'Unknown', iceQueue:[], volume: 1.0, analyser: null };
 
-        // Attach the pure, hardware-optimized localStream directly.
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        // Attach the completely filtered 'processedStream' to send bandpassed audio to peers.
+        processedStream.getTracks().forEach(track => pc.addTrack(track, processedStream));
 
         const audioEl = document.createElement('audio');
         audioEl.autoplay = true;
@@ -506,7 +560,8 @@
 
         let voiceEnergy = 0;
 
-        // Dynamically calculate frequency bin mappings based on UI slider settings
+        // Dynamically calculate frequency bin mappings for gate strictness 
+        // (the audio is already band-limited, this isolates the gate reading further)
         const binWidth = audioCtx.sampleRate / localAnalyser.fftSize;
         const startBin = Math.max(1, Math.floor(parseFloat(minFreq.value) / binWidth));
         const endBin = Math.min(localAnalyser.frequencyBinCount - 1, Math.floor(parseFloat(maxFreq.value) / binWidth));
@@ -535,11 +590,11 @@
         // Hold mic open for calculated hold time after volume drops (prevents stuttering)
         const isSpeaking = (Date.now() - lastSpeakTime) < holdMs;
 
-        // Apply muting to the localStream outgoing tracks
-        if (localStream && !isMuted) {
-            localStream.getAudioTracks()[0].enabled = isSpeaking;
-        } else if (localStream && isMuted) {
-            localStream.getAudioTracks()[0].enabled = false;
+        // Apply muting to the processedStream's outgoing tracks so peers don't hear noise
+        if (processedStream && !isMuted) {
+            processedStream.getAudioTracks()[0].enabled = isSpeaking;
+        } else if (processedStream && isMuted) {
+            processedStream.getAudioTracks()[0].enabled = false;
         }
 
         // Update Local Visual Meter
@@ -673,6 +728,7 @@
         }
         Object.keys(peers).forEach(id => removePeer(id));
         if (localStream) localStream.getTracks().forEach(track => track.stop());
+        if (processedStream) processedStream.getTracks().forEach(track => track.stop());
         if (audioCtx) audioCtx.close();
         location.reload();
     };
