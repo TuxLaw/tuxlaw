@@ -8,35 +8,41 @@
     <style>
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            background-color: #f0f2f5;
-            color: #1c1e21;
+            background-color: #121212;
+            color: #e0e0e0;
             margin: 0;
             padding: 20px;
             display: flex;
             justify-content: center;
+            color-scheme: dark;
         }
         .container {
             max-width: 900px;
             width: 100%;
         }
         .card {
-            background: white;
+            background: #1e1e1e;
             padding: 2rem;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
-        h1, h2, h3 { margin-top: 0; color: #0056b3; }
-        input[type="text"] {
+        h1, h2, h3 { margin-top: 0; color: #64b5f6; }
+        
+        input[type="text"], input[type="range"] {
             width: 100%;
             padding: 12px;
             margin: 8px 0 16px;
             box-sizing: border-box;
-            border: 1px solid #ccc;
+            background-color: #2c2c2c;
+            color: #ffffff;
+            border: 1px solid #444;
             border-radius: 6px;
             font-size: 16px;
         }
+        input[type="text"]::placeholder { color: #888; }
+        
         button {
-            background-color: #0d6efd;
+            background-color: #1976d2;
             color: white;
             border: none;
             padding: 12px 24px;
@@ -46,12 +52,13 @@
             font-weight: bold;
             transition: background 0.2s;
         }
-        button:hover { background-color: #0b5ed7; }
-        button:disabled { background-color: #6c757d; cursor: not-allowed; opacity: 0.7;}
-        .btn-danger { background-color: #dc3545; }
-        .btn-danger:hover { background-color: #bb2d3b; }
-        .btn-success { background-color: #198754; }
-        .btn-success:hover { background-color: #157347; }
+        button:hover { background-color: #1565c0; }
+        button:disabled { background-color: #555; color: #888; cursor: not-allowed; }
+        
+        .btn-danger { background-color: #d32f2f; }
+        .btn-danger:hover { background-color: #b71c1c; }
+        .btn-success { background-color: #2e7d32; }
+        .btn-success:hover { background-color: #1b5e20; }
 
         /* Layout for Chat Screen */
         #chat-screen { display: none; }
@@ -61,7 +68,7 @@
             align-items: center;
             margin-bottom: 20px;
             padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #333;
         }
         .main-layout {
             display: flex;
@@ -71,8 +78,8 @@
         .panel {
             flex: 1;
             min-width: 300px;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: #232323;
+            border: 1px solid #333;
             border-radius: 8px;
             padding: 15px;
             display: flex;
@@ -87,8 +94,8 @@
         }
         .participant-list li {
             padding: 12px;
-            background: white;
-            border: 1px solid #dee2e6;
+            background: #2c2c2c;
+            border: 1px solid #444;
             border-radius: 6px;
             margin-bottom: 10px;
         }
@@ -102,28 +109,29 @@
             font-size: 12px;
             padding: 4px 8px;
             border-radius: 12px;
-            background: #ffc107;
+            background: #ffa000;
             color: #000;
+            font-weight: bold;
         }
-        .status-badge.connected { background: #198754; color: white; }
+        .status-badge.connected { background: #4caf50; color: white; }
 
         .controls-row {
             display: flex;
             align-items: center;
             gap: 15px;
             font-size: 13px;
-            color: #555;
+            color: #bbb;
             margin-top: 8px;
         }
         .volume-slider-container {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 10px;
             flex: 1;
         }
         .volume-slider-container input[type="range"] {
-            flex: 1;
             margin: 0;
+            padding: 0;
             cursor: pointer;
         }
 
@@ -131,26 +139,26 @@
         .meter-bg {
             width: 100%;
             height: 6px;
-            background: #e9ecef;
+            background: #444;
             border-radius: 3px;
             overflow: hidden;
             margin-top: 8px;
         }
         .meter-fill {
             height: 100%;
-            background: #0d6efd;
+            background: #64b5f6;
             width: 0%;
             transition: width 0.05s ease-out, background-color 0.2s ease;
         }
-        .meter-fill.local { background: #198754; }
+        .meter-fill.local { background: #4caf50; }
 
         /* Text Chat */
         #chatHistory {
             flex: 1;
             height: 300px;
             overflow-y: auto;
-            background: white;
-            border: 1px solid #dee2e6;
+            background: #2c2c2c;
+            border: 1px solid #444;
             border-radius: 6px;
             padding: 10px;
             margin-bottom: 10px;
@@ -166,19 +174,19 @@
             word-wrap: break-word;
         }
         .chat-msg.self {
-            background: #0d6efd;
+            background: #1976d2;
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 2px;
         }
         .chat-msg.other {
-            background: #e9ecef;
-            color: black;
+            background: #3d3d3d;
+            color: #e0e0e0;
             align-self: flex-start;
             border-bottom-left-radius: 2px;
         }
         .chat-msg strong { font-size: 12px; display: block; margin-bottom: 2px; opacity: 0.8; }
-        .chat-input-row { display: flex; gap: 10px; }
+        .chat-input-row { display: flex; gap: 10px; align-items: center; }
         .chat-input-row input { margin: 0; }
     </style>
 </head>
@@ -187,13 +195,13 @@
 <div class="container">
     <div class="card" id="setup-screen">
         <h1 style="text-align: center;">Voice & Text Room</h1>
-        <p style="text-align: center;">Join a serverless P2P mesh network.</p>
+        <p style="text-align: center; color: #aaa;">Join a serverless P2P mesh network.</p>
 
         <input type="text" id="userName" placeholder="Your Name (e.g., Alice)" autocomplete="off">
         <input type="text" id="roomId" placeholder="Room Name (e.g., dev-chat-123)" autocomplete="off">
 
         <button id="joinBtn" style="width: 100%;">Join Room</button>
-        <p id="statusText" style="color: #666; font-size: 14px; display: none; text-align: center;">Requesting microphone...</p>
+        <p id="statusText" style="color: #aaa; font-size: 14px; display: none; text-align: center;">Requesting microphone...</p>
     </div>
 
     <div class="card" id="chat-screen">
@@ -208,40 +216,6 @@
         <div class="main-layout">
             <div class="panel">
                 <h3>Participants & Audio</h3>
-
-                <!-- Built-In Noise Cancellation Toggles -->
-                <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
-                    <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 8px;">Hardware / Browser Filters</label>
-                    <div style="display: flex; gap: 15px; font-size: 13px; flex-wrap: wrap;">
-                        <label><input type="checkbox" id="echoCancel" checked> Echo Cancel</label>
-                        <label><input type="checkbox" id="noiseSupp" checked> Noise Suppress</label>
-                        <label><input type="checkbox" id="autoGain" checked> Auto Gain</label>
-                    </div>
-                </div>
-
-                <!-- Noise Gate & Bandpass Filter Threshold Controls -->
-                <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
-                    <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">
-                        Activation Threshold: <span id="thresholdVal">10</span>%
-                    </label>
-                    <input type="range" id="micThreshold" min="0" max="100" value="10" style="width: 100%;">
-
-                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
-                        Highpass (Min Freq): <span id="minFreqVal">90</span> Hz
-                    </label>
-                    <input type="range" id="minFreq" min="20" max="500" value="90" style="width: 100%;">
-
-                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
-                        Lowpass (Max Freq): <span id="maxFreqVal">1500</span> Hz
-                    </label>
-                    <input type="range" id="maxFreq" min="500" max="8000" value="1500" style="width: 100%;">
-
-                    <label style="font-size: 13px; font-weight: bold; display: block; margin-top: 10px; margin-bottom: 5px;">
-                        Hold Time: <span id="holdTimeVal">1000</span> ms
-                    </label>
-                    <input type="range" id="holdTime" min="0" max="3000" value="1000" step="50" style="width: 100%;">
-                </div>
-
                 <ul id="participants" class="participant-list">
                     <!-- Peers inject here -->
                 </ul>
@@ -265,20 +239,15 @@
     const rtcConfig = { iceServers:[{ urls: 'stun:stun.l.google.com:19302' }] };
 
     let localStream;
-    let processedStream; // The actual bandpass-filtered audio sent to peers
     let mqttClient;
     let myId = Math.random().toString(36).substring(2, 12);
     let myName = '';
     let roomTopic = '';
-    let lastSpeakTime = 0;
 
-    // Web Audio API Elements
+    // Web Audio API Elements (Only used for drawing the visual UI volume meters now)
     let audioCtx;
-    let localSource; // Added globally so we can disconnect it when changing hardware filters
     let localAnalyser;
     let audioDataArray;
-    let highPassFilter;
-    let lowPassFilter;
 
     const peers = {}; 
     let isMuted = false;
@@ -294,75 +263,6 @@
     const chatHistory = document.getElementById('chatHistory');
     const chatInput = document.getElementById('chatInput');
     const sendChatBtn = document.getElementById('sendChatBtn');
-
-    // Built-in Native Filters UI
-    const echoCancel = document.getElementById('echoCancel');
-    const noiseSupp = document.getElementById('noiseSupp');
-    const autoGain = document.getElementById('autoGain');
-
-    const updateNativeAudio = async () => {
-        if (!localStream) return; // If we haven't joined yet, do nothing.
-
-        // Disable checkboxes while restarting the hardware
-        echoCancel.disabled = noiseSupp.disabled = autoGain.disabled = true;
-
-        try {
-            // Browsers don't support updating these constraints on an active track reliably,
-            // so we request an entirely new stream from the OS.
-            const newStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: echoCancel.checked,
-                    noiseSuppression: noiseSupp.checked,
-                    autoGainControl: autoGain.checked
-                },
-                video: false
-            });
-
-            // Disconnect old source from our audio processing graph
-            if (localSource) localSource.disconnect();
-            
-            // Turn off old microphone tracks
-            localStream.getTracks().forEach(track => track.stop());
-
-            // Assign new stream and seamlessly reconnect to the start of the filters
-            localStream = newStream;
-            localSource = audioCtx.createMediaStreamSource(localStream);
-            localSource.connect(highPassFilter); // The rest of the graph remains perfectly intact
-
-        } catch (e) {
-            console.error("Failed to update hardware filters", e);
-            alert("Could not update hardware features. Ensure mic is accessible.");
-        } finally {
-            echoCancel.disabled = noiseSupp.disabled = autoGain.disabled = false;
-        }
-    };
-
-    echoCancel.addEventListener('change', updateNativeAudio);
-    noiseSupp.addEventListener('change', updateNativeAudio);
-    autoGain.addEventListener('change', updateNativeAudio);
-
-    // Threshold & Isolation UI
-    const micThreshold = document.getElementById('micThreshold');
-    const thresholdVal = document.getElementById('thresholdVal');
-    micThreshold.addEventListener('input', () => { thresholdVal.innerText = micThreshold.value; });
-
-    const minFreq = document.getElementById('minFreq');
-    const minFreqVal = document.getElementById('minFreqVal');
-    minFreq.addEventListener('input', () => { 
-        minFreqVal.innerText = minFreq.value; 
-        if (highPassFilter) highPassFilter.frequency.value = parseFloat(minFreq.value);
-    });
-
-    const maxFreq = document.getElementById('maxFreq');
-    const maxFreqVal = document.getElementById('maxFreqVal');
-    maxFreq.addEventListener('input', () => { 
-        maxFreqVal.innerText = maxFreq.value; 
-        if (lowPassFilter) lowPassFilter.frequency.value = parseFloat(maxFreq.value);
-    });
-
-    const holdTime = document.getElementById('holdTime');
-    const holdTimeVal = document.getElementById('holdTimeVal');
-    holdTime.addEventListener('input', () => { holdTimeVal.innerText = holdTime.value; });
 
     // --- URL ROOM HANDLING (STRICT HASH) ---
     window.addEventListener('load', () => {
@@ -392,44 +292,21 @@
         joinBtn.disabled = true;
 
         try {
-            // Get initial Mic Access taking custom checkboxes into account
+            // Get standard raw Mic Access (Browser default noise cancellation applies automatically)
             localStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: echoCancel.checked,
-                    noiseSuppression: noiseSupp.checked,
-                    autoGainControl: autoGain.checked
-                },
+                audio: true,
                 video: false
             });
 
-            // --- Init Web Audio API for Smart Analyser & Actual Processing ---
+            // --- Init Web Audio API ONLY for visual volume meters ---
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            localSource = audioCtx.createMediaStreamSource(localStream);
-
-            // Audio Filters mapped to Sliders
-            highPassFilter = audioCtx.createBiquadFilter();
-            highPassFilter.type = 'highpass';
-            highPassFilter.frequency.value = parseFloat(minFreq.value);
-
-            lowPassFilter = audioCtx.createBiquadFilter();
-            lowPassFilter.type = 'lowpass';
-            lowPassFilter.frequency.value = parseFloat(maxFreq.value);
-
-            // Analyser for UI Visuals & Smart VAD Gate logic
+            const localSource = audioCtx.createMediaStreamSource(localStream);
+            
             localAnalyser = audioCtx.createAnalyser();
-            localAnalyser.fftSize = 512;
+            localAnalyser.fftSize = 256;
             audioDataArray = new Uint8Array(localAnalyser.frequencyBinCount);
-
-            // Creates the actual processed stream that will be pushed to the peers
-            const rtcDest = audioCtx.createMediaStreamDestination();
-            processedStream = rtcDest.stream;
-
-            // Wire up the audio graph: Mic -> Highpass -> Lowpass -> VAD/Visuals -> Output to peers
-            localSource.connect(highPassFilter);
-            highPassFilter.connect(lowPassFilter);
-            lowPassFilter.connect(localAnalyser);
-            lowPassFilter.connect(rtcDest);
-
+            
+            localSource.connect(localAnalyser);
             requestAnimationFrame(updateMeters);
 
             // Connect to Signaling Broker
@@ -511,8 +388,8 @@
         const pc = new RTCPeerConnection(rtcConfig);
         peers[id] = { pc, name: name || 'Unknown', iceQueue:[], volume: 1.0, analyser: null };
 
-        // Attach the completely filtered 'processedStream' to send bandpassed audio to peers.
-        processedStream.getTracks().forEach(track => pc.addTrack(track, processedStream));
+        // Attach raw local stream to WebRTC directly
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         const audioEl = document.createElement('audio');
         audioEl.autoplay = true;
@@ -524,6 +401,7 @@
                 audioEl.srcObject = event.streams[0];
 
                 try {
+                    // Create analyser for remote peer to power their visual meter
                     const remoteSource = audioCtx.createMediaStreamSource(event.streams[0]);
                     const remoteAnalyser = audioCtx.createAnalyser();
                     remoteAnalyser.fftSize = 256;
@@ -578,75 +456,33 @@
         mqttClient.publish(roomTopic, JSON.stringify(msgObj));
     }
 
-    // --- SMART FREQUENCY VAD & NOISE GATE LOOP ---
+    // --- VISUAL UI METERS LOOP ---
     function updateMeters() {
         if (!audioCtx) return;
 
+        // Local Volume Calc
         localAnalyser.getByteFrequencyData(audioDataArray);
-
-        let voiceEnergy = 0;
-
-        // Dynamically calculate frequency bin mappings for gate strictness 
-        // (the audio is already band-limited, this isolates the gate reading further)
-        const binWidth = audioCtx.sampleRate / localAnalyser.fftSize;
-        const startBin = Math.max(1, Math.floor(parseFloat(minFreq.value) / binWidth));
-        const endBin = Math.min(localAnalyser.frequencyBinCount - 1, Math.floor(parseFloat(maxFreq.value) / binWidth));
-
-        let count = 0;
-        if (startBin <= endBin) {
-            for (let i = startBin; i <= endBin; i++) {
-                voiceEnergy += audioDataArray[i];
-                count++;
-            }
-        }
-
-        let voiceAvg = count > 0 ? (voiceEnergy / count) : 0;
-
-        // Base percentage strictly off isolated human voice frequencies
-        const localVol = Math.min(100, (voiceAvg / 255) * 100);
-
-        const threshold = parseFloat(micThreshold.value);
-        const holdMs = parseInt(holdTime.value);
-
-        // VAD LOGIC: Activation threshold works ONLY on the isolated voice volume
-        if (localVol >= threshold) {
-            lastSpeakTime = Date.now();
-        }
-
-        // Hold mic open for calculated hold time after volume drops (prevents stuttering)
-        const isSpeaking = (Date.now() - lastSpeakTime) < holdMs;
-
-        // Apply muting to the processedStream's outgoing tracks so peers don't hear noise
-        if (processedStream && !isMuted) {
-            processedStream.getAudioTracks()[0].enabled = isSpeaking;
-        } else if (processedStream && isMuted) {
-            processedStream.getAudioTracks()[0].enabled = false;
-        }
+        let sum = 0;
+        for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
+        let avg = sum / audioDataArray.length;
+        let localVol = Math.min(100, (avg / 255) * 100);
 
         // Update Local Visual Meter
         const localMeter = document.getElementById('meter-local');
         if (localMeter) {
             localMeter.style.width = localVol + '%';
-
-            // Color feedback (Red = Manually Muted, Gray = Blocked by Gate, Green = Active)
-            if (isMuted) {
-                localMeter.style.background = '#dc3545';
-            } else if (!isSpeaking) {
-                localMeter.style.background = '#6c757d';
-            } else {
-                localMeter.style.background = '#198754';
-            }
+            localMeter.style.background = isMuted ? '#d32f2f' : '#4caf50'; // Red if muted, Green if active
         }
 
-        // Update Peer Meters
+        // Update Peer Visual Meters
         Object.keys(peers).forEach(id => {
             const peerMeter = document.getElementById(`meter-${id}`);
             if (peerMeter && peers[id].analyser) {
                 peers[id].analyser.getByteFrequencyData(audioDataArray);
-                let sum = 0;
-                for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
-                let avg = sum / audioDataArray.length;
-                peerMeter.style.width = Math.min(100, (avg / 255) * 100) + '%';
+                let pSum = 0;
+                for (let i = 0; i < audioDataArray.length; i++) pSum += audioDataArray[i];
+                let pAvg = pSum / audioDataArray.length;
+                peerMeter.style.width = Math.min(100, (pAvg / 255) * 100) + '%';
             }
         });
 
@@ -721,7 +557,7 @@
 
     function appendSystemMessage(text) {
         const div = document.createElement('div');
-        div.style = "text-align: center; font-size: 12px; color: #888; margin: 4px 0;";
+        div.style = "text-align: center; font-size: 12px; color: #aaa; margin: 4px 0;";
         div.innerText = text;
         chatHistory.appendChild(div);
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -745,6 +581,11 @@
         isMuted = !isMuted;
         e.target.innerText = isMuted ? "Unmute My Mic" : "Mute My Mic";
         e.target.className = isMuted ? "btn-danger" : "btn-success";
+        
+        // Actually disable the hardware audio track so no sound goes to peers
+        if (localStream && localStream.getAudioTracks().length > 0) {
+            localStream.getAudioTracks()[0].enabled = !isMuted;
+        }
     };
 
     const disconnect = () => {
@@ -754,7 +595,6 @@
         }
         Object.keys(peers).forEach(id => removePeer(id));
         if (localStream) localStream.getTracks().forEach(track => track.stop());
-        if (processedStream) processedStream.getTracks().forEach(track => track.stop());
         if (audioCtx) audioCtx.close();
         location.reload();
     };
