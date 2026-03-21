@@ -22,17 +22,26 @@
             --border: #333333;
         }
 
+        html {
+            background-color: #000000; /* Dark background outside the 600px app container */
+        }
+
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background-color: var(--bg-base);
             color: var(--text-main);
-            margin: 0;
+            margin: 0 auto; /* Center the app on larger screens */
             padding: 0;
-            height: 100vh;
-            width: 100vw;
+            height: 100vh; /* Fallback for older browsers */
+            height: 100dvh; /* Dynamic viewport fixes mobile keyboard/address bar issues */
+            width: 100%;
+            max-width: 600px; /* Restrict max width to 600px */
             display: flex;
+            flex-direction: column;
             color-scheme: dark;
             overflow: hidden; /* Prevent body scrolling */
+            box-shadow: 0 0 20px rgba(0,0,0,0.6); /* Add shadow to separate from HTML bg */
+            position: relative;
         }
 
         /* Custom Slim Scrollbars */
@@ -578,7 +587,15 @@
         joinVoiceBtn.innerText = "Requesting...";
 
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // Updated constraints for Auto Gain Control, Noise Suppression & Echo Cancellation
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    autoGainControl: true,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }, 
+                video: false 
+            });
             
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const localSource = audioCtx.createMediaStreamSource(localStream);
