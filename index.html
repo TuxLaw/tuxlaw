@@ -776,13 +776,24 @@
         requestAnimationFrame(updateMeters);
     }
 
+    // --- HTML ESCAPE HELPER ---
+    function escapeHTML(str) {
+        return String(str).replace(/[&<>"']/g, match => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[match]));
+    }
+
     // --- UI UPDATES ---
     function updateUI() {
         let html = `
             <li>
                 <div class="peer-header">
                     <div class="peer-info">
-                        <span>${myName} (You)</span>
+                        <span>${escapeHTML(myName)} (You)</span>
                         <span class="status-badge ${inVoice ? 'voice' : ''}">${inVoice ? 'Voice Active' : 'Text Only'}</span>
                     </div>
                 </div>
@@ -804,7 +815,7 @@
                 <li>
                     <div class="peer-header">
                         <div class="peer-info">
-                            <span>${peer.name}</span>
+                            <span>${escapeHTML(peer.name)}</span>
                             <span class="status-badge ${badgeClass}">${badgeText}</span>
                         </div>
                     </div>
@@ -850,17 +861,24 @@
         }
     }
 
+    // Fixed Critical XSS by building DOM nodes safely instead of using innerHTML
     function appendChatMessage(name, text, isSelf) {
         const div = document.createElement('div');
         div.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
-        div.innerHTML = `<strong>${isSelf ? "You" : name}</strong>${text}`;
+        
+        const strong = document.createElement('strong');
+        strong.textContent = isSelf ? "You" : name;
+        
+        div.appendChild(strong);
+        div.appendChild(document.createTextNode(text));
+        
         appendElementWithSmartScroll(div);
     }
 
     function appendSystemMessage(text) {
         const div = document.createElement('div');
         div.style = "text-align: center; font-size: 12px; color: #888; margin: 6px 0;";
-        div.innerText = text;
+        div.innerText = text; // innerText safely escapes HTML
         appendElementWithSmartScroll(div);
     }
 
