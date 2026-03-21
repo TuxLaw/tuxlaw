@@ -240,7 +240,6 @@
     const rtcConfig = { iceServers:[{ urls: 'stun:stun.l.google.com:19302' }] };
     
     let localStream;
-    let rtcStream; // Filtered stream strictly for WebRTC delivery
     let mqttClient;
     let myId = Math.random().toString(36).substring(2, 12);
     let myName = '';
@@ -294,34 +293,19 @@
                 video: false 
             });
             
-            // --- Init Web Audio API for Voice Isolation & Meters ---
+            // --- Init Web Audio API for Smart Analyser ---
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const localSource = audioCtx.createMediaStreamSource(localStream);
             
-            // 1. Highpass Filter: Removes low desk rumbles/thumps (below 85Hz)
-            const highpass = audioCtx.createBiquadFilter();
-            highpass.type = "highpass";
-            highpass.frequency.value = 85; 
+            // We clone the track just for the analyser. This ensures the visual meter 
+            // keeps working even when we mute the main stream sent to peers.
+            const analyserTrack = localStream.getAudioTracks()[0].clone();
+            const analyserStream = new MediaStream([analyserTrack]);
+            const localSource = audioCtx.createMediaStreamSource(analyserStream);
 
-            // 2. Lowpass Filter: Removes sharp, high-frequency keyboard clacks (above 4000Hz)
-            const lowpass = audioCtx.createBiquadFilter();
-            lowpass.type = "lowpass";
-            lowpass.frequency.value = 4000;
-
-            // 3. Destination: The isolated vocal audio we will actually send to peers
-            const destination = audioCtx.createMediaStreamDestination();
-            rtcStream = destination.stream;
-
-            // 4. Analyser: Reads the filtered vocal volume for the visual meter and Noise Gate
             localAnalyser = audioCtx.createAnalyser();
-            localAnalyser.fftSize = 256; 
+            localAnalyser.fftSize = 512; 
             audioDataArray = new Uint8Array(localAnalyser.frequencyBinCount);
-
-            // Connect the audio processing graph: Mic -> Highpass -> Lowpass -> Destination & Analyser
-            localSource.connect(highpass);
-            highpass.connect(lowpass);
-            lowpass.connect(localAnalyser);
-            lowpass.connect(destination);
+            localSource.connect(localAnalyser);
             
             requestAnimationFrame(updateMeters);
 
@@ -404,8 +388,8 @@
         const pc = new RTCPeerConnection(rtcConfig);
         peers[id] = { pc, name: name || 'Unknown', iceQueue:[], volume: 1.0, analyser: null };
 
-        // Attach the rtcStream (filtered vocal range), not the localStream directly
-        rtcStream.getTracks().forEach(track => pc.addTrack(track, rtcStream));
+        // Attach the pure, hardware-optimized localStream directly.
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         const audioEl = document.createElement('audio');
         audioEl.autoplay = true;
@@ -471,38 +455,44 @@
         mqttClient.publish(roomTopic, JSON.stringify(msgObj));
     }
 
-    // --- AUDIO VISUALIZATION & NOISE GATE LOOP ---
+    // --- SMART FREQUENCY VAD & NOISE GATE LOOP ---
     function updateMeters() {
         if (!audioCtx) return;
 
-        function getVolumePercentage(analyser) {
-            if (!analyser) return 0;
-            analyser.getByteFrequencyData(audioDataArray);
-            let sum = 0;
-            for (let i = 0; i < audioDataArray.length; i++) {
-                sum += audioDataArray[i];
-            }
-            const average = sum / audioDataArray.length;
-            return Math.min(100, (average / 100) * 100); 
-        }
-
-        // Calculate Local Volume
-        const localVol = getVolumePercentage(localAnalyser);
+        localAnalyser.getByteFrequencyData(audioDataArray);
         
-        // --- Noise Gate Threshold ---
+        let voiceEnergy = 0;
+        let clickEnergy = 0;
+
+        // Bins 1-16 (Approx 90Hz to 1500Hz) - Core frequencies of human speech
+        for (let i = 1; i <= 16; i++) voiceEnergy += audioDataArray[i];
+        let voiceAvg = voiceEnergy / 16;
+
+        // Bins 26-85 (Approx 2400Hz to 8000Hz) - Harsh keyboard clacks and desk clicks
+        for (let i = 26; i <= 85; i++) clickEnergy += audioDataArray[i];
+        let clickAvg = clickEnergy / 60;
+
+        // Base percentage strictly off human voice frequencies
+        const localVol = Math.min(100, (voiceAvg / 255) * 100);
+        
         const threshold = parseFloat(micThreshold.value);
-        if (localVol >= threshold) {
+        
+        // VAD LOGIC: The sound must cross the threshold AND be heavily vocal.
+        // Pure keyboard clicks spike clickAvg heavily, causing this to stay false.
+        const isVoiceDominant = voiceAvg > (clickAvg * 1.2);
+        
+        if (localVol >= threshold && isVoiceDominant) {
             lastSpeakTime = Date.now();
         }
         
         // Hold mic open for 1 second after volume drops (prevents stuttering)
         const isSpeaking = (Date.now() - lastSpeakTime) < 1000;
         
-        // Apply muting to the rtcStream outgoing tracks
-        if (rtcStream && !isMuted) {
-            rtcStream.getAudioTracks()[0].enabled = isSpeaking;
-        } else if (rtcStream && isMuted) {
-            rtcStream.getAudioTracks()[0].enabled = false;
+        // Apply muting to the localStream outgoing tracks
+        if (localStream && !isMuted) {
+            localStream.getAudioTracks()[0].enabled = isSpeaking;
+        } else if (localStream && isMuted) {
+            localStream.getAudioTracks()[0].enabled = false;
         }
 
         // Update Local Visual Meter
@@ -524,7 +514,11 @@
         Object.keys(peers).forEach(id => {
             const peerMeter = document.getElementById(`meter-${id}`);
             if (peerMeter && peers[id].analyser) {
-                peerMeter.style.width = getVolumePercentage(peers[id].analyser) + '%';
+                peers[id].analyser.getByteFrequencyData(audioDataArray);
+                let sum = 0;
+                for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
+                let avg = sum / audioDataArray.length;
+                peerMeter.style.width = Math.min(100, (avg / 255) * 100) + '%';
             }
         });
 
@@ -621,10 +615,6 @@
     // --- MUTE & LEAVE CONTROLS ---
     document.getElementById('muteBtn').onclick = (e) => {
         isMuted = !isMuted;
-        
-        // Disable the original stream so analyser reads '0' and the red visual effect triggers
-        localStream.getAudioTracks()[0].enabled = !isMuted;
-        
         e.target.innerText = isMuted ? "Unmute My Mic" : "Mute My Mic";
         e.target.className = isMuted ? "btn-danger" : "btn-success";
     };
@@ -636,7 +626,6 @@
         }
         Object.keys(peers).forEach(id => removePeer(id));
         if (localStream) localStream.getTracks().forEach(track => track.stop());
-        if (rtcStream) rtcStream.getTracks().forEach(track => track.stop());
         if (audioCtx) audioCtx.close();
         location.reload();
     };
