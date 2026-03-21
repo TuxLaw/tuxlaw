@@ -33,7 +33,7 @@
             margin: 0 auto;
             padding: 0;
             height: 100vh;
-            height: 100dvh;
+            height: 100dvh; /* Dynamic viewport fixes mobile keyboard/address bar issues */
             width: 100%;
             max-width: 600px;
             display: flex;
@@ -44,27 +44,28 @@
             position: relative;
         }
 
-        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #777; }
 
+        /* Inputs kept at 16px to prevent iOS Safari auto-zoom */
         input[type="text"], input[type="range"] {
             box-sizing: border-box;
             background-color: var(--bg-input);
             color: #ffffff;
             border: 1px solid var(--border);
-            font-size: 30px; /* Doubled from 15px */
+            font-size: 16px; 
         }
         input[type="text"]::placeholder { color: var(--text-muted); }
-        input[type="text"]:focus { outline: 2px solid var(--primary); border-color: transparent; }
+        input[type="text"]:focus { outline: 1px solid var(--primary); border-color: transparent; }
         
         button {
             background-color: var(--primary);
             color: white;
             border: none;
             cursor: pointer;
-            font-size: 28px; /* Doubled from 14px */
+            font-size: 15px;
             font-weight: 600;
             transition: background 0.2s;
         }
@@ -92,16 +93,16 @@
             padding: 2.5rem 2rem;
             border-radius: 12px;
             width: 100%;
-            max-width: 500px; /* Widened to accommodate larger text */
+            max-width: 360px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
         }
-        .setup-card h1 { margin: 0 0 5px 0; color: var(--accent); text-align: center; font-size: 48px; /* Doubled from 24px */}
-        .setup-card p { margin: 0 0 15px 0; color: var(--text-muted); text-align: center; font-size: 28px; /* Doubled from 14px */}
-        .setup-card input[type="text"] { padding: 16px; border-radius: 8px; width: 100%; }
-        .setup-card button { padding: 16px; border-radius: 8px; width: 100%; font-size: 30px; /* Doubled from 15px */ margin-top: 5px;}
+        .setup-card h1 { margin: 0 0 5px 0; color: var(--accent); text-align: center; font-size: 26px; }
+        .setup-card p { margin: 0 0 10px 0; color: var(--text-muted); text-align: center; font-size: 15px; }
+        .setup-card input[type="text"] { padding: 12px; border-radius: 8px; width: 100%; }
+        .setup-card button { padding: 12px; border-radius: 8px; width: 100%; font-size: 16px; margin-top: 5px;}
 
         /* --- MAIN CHAT SCREEN --- */
         #chat-screen {
@@ -117,16 +118,16 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px;
+            padding: 12px 16px;
             background: var(--bg-surface);
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
-            flex-wrap: wrap; /* Allows wrap if buttons get too big */
+            flex-wrap: wrap;
             gap: 10px;
         }
-        .top-header h2 { margin: 0; font-size: 32px; /* Doubled from 16px */ font-weight: 600; color: var(--accent); }
-        .header-buttons { display: flex; gap: 10px; flex-wrap: wrap;}
-        .header-buttons button { padding: 10px 16px; border-radius: 8px; font-size: 26px; /* Doubled from 13px */ }
+        .top-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--accent); }
+        .header-buttons { display: flex; gap: 8px; flex-wrap: wrap;}
+        .header-buttons button { padding: 8px 14px; border-radius: 6px; font-size: 14px; }
 
         /* Tabs */
         .tabs {
@@ -139,10 +140,10 @@
             flex: 1;
             background: transparent;
             color: var(--text-muted);
-            padding: 16px 0;
-            font-size: 24px; /* Doubled from 14px */
+            padding: 12px 0;
+            font-size: 15px;
             border-radius: 0;
-            border-bottom: 4px solid transparent;
+            border-bottom: 2px solid transparent;
         }
         .tab-btn:hover { background: rgba(255,255,255,0.05); }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -170,13 +171,13 @@
             padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
         }
         .chat-msg {
-            padding: 14px 20px;
-            border-radius: 20px;
+            padding: 10px 14px;
+            border-radius: 18px;
             max-width: 85%;
-            font-size: 29px; /* Doubled from 14.5px */
+            font-size: 15px;
             line-height: 1.4;
             word-wrap: break-word;
         }
@@ -184,32 +185,32 @@
             background: var(--primary);
             color: white;
             align-self: flex-end;
-            border-bottom-right-radius: 6px;
+            border-bottom-right-radius: 4px;
         }
         .chat-msg.other {
             background: var(--bg-surface);
             color: var(--text-main);
             align-self: flex-start;
-            border-bottom-left-radius: 6px;
+            border-bottom-left-radius: 4px;
         }
-        .chat-msg strong { font-size: 24px; /* Doubled from 12px */ display: block; margin-bottom: 6px; opacity: 0.8; font-weight: 600;}
+        .chat-msg strong { font-size: 13px; display: block; margin-bottom: 4px; opacity: 0.8; font-weight: 600;}
         
         /* Input Area & Emoji Picker */
         .chat-input-wrapper {
             position: relative;
             background: var(--bg-surface);
             border-top: 1px solid var(--border);
-            padding: 14px 16px;
+            padding: 10px 16px;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
             flex-shrink: 0;
         }
         #emojiBtn {
             background: transparent;
             color: var(--text-muted);
-            font-size: 44px; /* Doubled from 22px */
-            padding: 6px;
+            font-size: 24px;
+            padding: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -232,16 +233,17 @@
 
         #chatInput {
             flex: 1;
-            border-radius: 30px;
-            padding: 14px 20px;
+            border-radius: 20px;
+            padding: 10px 16px;
             border: none;
             background: var(--bg-input);
             margin: 0;
-            min-width: 0; /* Helps it shrink properly */
+            min-width: 0;
         }
         #sendChatBtn {
-            border-radius: 30px;
-            padding: 12px 24px;
+            border-radius: 20px;
+            padding: 8px 18px;
+            font-size: 15px;
         }
 
         /* --- VOICE PANEL --- */
@@ -253,7 +255,7 @@
             flex: 1;
         }
         .participant-list li {
-            padding: 20px 16px;
+            padding: 16px;
             background: var(--bg-base);
             border-bottom: 1px solid var(--border);
         }
@@ -261,15 +263,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
         }
-        .peer-info { display: flex; align-items: center; gap: 12px; font-weight: 500; font-size: 28px;}
+        .peer-info { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px;}
         .status-badge {
-            font-size: 20px; /* Doubled from 10px */
-            padding: 6px 12px;
-            border-radius: 16px;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 12px;
             background: #444;
             color: #fff;
             text-transform: uppercase;
@@ -282,27 +284,27 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            flex-wrap: wrap; /* Allows wrap for bigger elements */
-            gap: 15px;
-            margin-top: 14px;
+            flex-wrap: wrap; 
+            gap: 12px;
+            margin-top: 10px;
         }
         .volume-slider-container {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             flex: 1;
-            font-size: 32px; /* Doubled from 16px */
+            font-size: 20px; /* For the speaker emoji */
             min-width: 150px;
         }
-        .volume-slider-container input[type="range"] { flex: 1; margin: 0; cursor: pointer; height: 12px;}
+        .volume-slider-container input[type="range"] { flex: 1; margin: 0; cursor: pointer; height: 6px;}
 
         .meter-bg {
             width: 100%;
-            height: 10px; /* Made slightly thicker to match big fonts */
+            height: 6px;
             background: var(--bg-surface);
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
-            margin-top: 12px;
+            margin-top: 8px;
         }
         .meter-fill {
             height: 100%;
@@ -595,7 +597,7 @@
         joinVoiceBtn.innerText = "Requesting...";
 
         try {
-            // Updated constraints for Auto Gain Control, Noise Suppression & Echo Cancellation
+            // Constraints for Auto Gain Control, Noise Suppression & Echo Cancellation
             localStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     autoGainControl: true,
@@ -742,7 +744,7 @@
     function updateMeters() {
         if (!audioCtx || !inVoice) return;
 
-        // FIXED: Using Max (Peak) Volume instead of Average to ensure meter actually moves
+        // Using Max (Peak) Volume instead of Average to ensure meter actually moves
         localAnalyser.getByteFrequencyData(audioDataArray);
         let maxVal = 0;
         for (let i = 0; i < audioDataArray.length; i++) {
@@ -816,7 +818,7 @@
                             <span>🔊</span>
                             <input type="range" min="0" max="1" step="0.01" value="${peer.volume}" class="vol-slider" data-id="${id}">
                         </div>
-                        <button class="${isMutedByMe ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleGlobalMute('${id}')" style="padding: 8px 16px;">
+                        <button class="${isMutedByMe ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleGlobalMute('${id}')" style="padding: 6px 12px; font-size: 13px;">
                             ${isMutedByMe ? 'Unmute' : 'Mute'}
                         </button>
                     </div>
@@ -857,7 +859,7 @@
 
     function appendSystemMessage(text) {
         const div = document.createElement('div');
-        div.style = "text-align: center; font-size: 24px; color: #888; margin: 8px 0;"; /* Doubled font size */
+        div.style = "text-align: center; font-size: 12px; color: #888; margin: 6px 0;";
         div.innerText = text;
         appendElementWithSmartScroll(div);
     }
