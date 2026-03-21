@@ -52,7 +52,7 @@
         .btn-danger:hover { background-color: #bb2d3b; }
         .btn-success { background-color: #198754; }
         .btn-success:hover { background-color: #157347; }
-        
+
         /* Layout for Chat Screen */
         #chat-screen { display: none; }
         .header-controls {
@@ -106,7 +106,7 @@
             color: #000;
         }
         .status-badge.connected { background: #198754; color: white; }
-        
+
         .controls-row {
             display: flex;
             align-items: center;
@@ -142,7 +142,7 @@
             width: 0%;
             transition: width 0.05s ease-out, background-color 0.2s ease;
         }
-        .meter-fill.local { background: #198754; } 
+        .meter-fill.local { background: #198754; }
 
         /* Text Chat */
         #chatHistory {
@@ -188,10 +188,10 @@
     <div class="card" id="setup-screen">
         <h1 style="text-align: center;">Voice & Text Room</h1>
         <p style="text-align: center;">Join a serverless P2P mesh network.</p>
-        
+
         <input type="text" id="userName" placeholder="Your Name (e.g., Alice)" autocomplete="off">
         <input type="text" id="roomId" placeholder="Room Name (e.g., dev-chat-123)" autocomplete="off">
-        
+
         <button id="joinBtn" style="width: 100%;">Join Room</button>
         <p id="statusText" style="color: #666; font-size: 14px; display: none; text-align: center;">Requesting microphone...</p>
     </div>
@@ -208,7 +208,7 @@
         <div class="main-layout">
             <div class="panel">
                 <h3>Participants & Audio</h3>
-                
+
                 <!-- Noise Gate & Isolation Threshold Controls -->
                 <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
                     <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">
@@ -253,18 +253,18 @@
 
 <script>
     const rtcConfig = { iceServers:[{ urls: 'stun:stun.l.google.com:19302' }] };
-    
+
     let localStream;
     let mqttClient;
     let myId = Math.random().toString(36).substring(2, 12);
     let myName = '';
     let roomTopic = '';
     let lastSpeakTime = 0;
-    
+
     // Web Audio API for visual meters and filters
     let audioCtx;
     let localAnalyser;
-    let audioDataArray; 
+    let audioDataArray;
 
     const peers = {}; // { peerId: { pc, name, iceQueue, audioEl, volume, analyser } }
     let isMuted = false;
@@ -276,7 +276,7 @@
     const roomIdInput = document.getElementById('roomId');
     const statusText = document.getElementById('statusText');
     const participantsList = document.getElementById('participants');
-    
+
     const chatHistory = document.getElementById('chatHistory');
     const chatInput = document.getElementById('chatInput');
     const sendChatBtn = document.getElementById('sendChatBtn');
@@ -298,39 +298,21 @@
     const holdTimeVal = document.getElementById('holdTimeVal');
     holdTime.addEventListener('input', () => { holdTimeVal.innerText = holdTime.value; });
 
-    // --- NEW: URL ROOM HANDLING ---
-    // Check for room in URL parameters, hash, or pathname on load
+    // --- URL ROOM HANDLING (STRICT HASH) ---
     window.addEventListener('load', () => {
-        const params = new URLSearchParams(window.location.search);
-        let roomName = params.get('room') || window.location.hash.substring(1);
-        
-        // If no direct parameter, extract from the end of the URL path (e.g. /chat/room123)
-        if (!roomName) {
-            const pathParts = window.location.pathname.split('/').filter(Boolean);
-            const lastPart = pathParts[pathParts.length - 1];
-            if (lastPart && !lastPart.includes('.html')) {
-                roomName = lastPart;
-            }
-        }
-
+        const roomName = window.location.hash.substring(1);
         if (roomName) {
             roomIdInput.value = decodeURIComponent(roomName);
         }
     });
 
-    // Update URL as user types the room name
     roomIdInput.addEventListener('input', () => {
         const val = roomIdInput.value.trim();
-        const newUrl = new URL(window.location);
-        
         if (val) {
-            newUrl.searchParams.set('room', val);
-            newUrl.hash = ''; // Clear hash to keep it clean
+            window.history.replaceState(null, null, "#" + encodeURIComponent(val));
         } else {
-            newUrl.searchParams.delete('room');
+            window.history.replaceState(null, null, window.location.pathname + window.location.search);
         }
-        
-        window.history.replaceState(null, null, newUrl);
     });
 
     // --- JOIN ROOM ---
@@ -345,29 +327,29 @@
 
         try {
             // Get Mic Access with High Quality Noise Cancellation
-            localStream = await navigator.mediaDevices.getUserMedia({ 
+            localStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
-                }, 
-                video: false 
+                },
+                video: false
             });
-            
+
             // --- Init Web Audio API for Smart Analyser ---
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // We clone the track just for the analyser. This ensures the visual meter 
+
+            // We clone the track just for the analyser. This ensures the visual meter
             // keeps working even when we mute the main stream sent to peers.
             const analyserTrack = localStream.getAudioTracks()[0].clone();
             const analyserStream = new MediaStream([analyserTrack]);
             const localSource = audioCtx.createMediaStreamSource(analyserStream);
 
             localAnalyser = audioCtx.createAnalyser();
-            localAnalyser.fftSize = 512; 
+            localAnalyser.fftSize = 512;
             audioDataArray = new Uint8Array(localAnalyser.frequencyBinCount);
             localSource.connect(localAnalyser);
-            
+
             requestAnimationFrame(updateMeters);
 
             // Connect to Signaling Broker
@@ -377,7 +359,7 @@
             mqttClient.on('connect', () => {
                 mqttClient.subscribe(roomTopic);
                 sendMsg({ type: 'hello', name: myName });
-                
+
                 document.getElementById('roomTitle').innerText = `Room: ${roomId}`;
                 setupScreen.style.display = 'none';
                 chatScreen.style.display = 'block';
@@ -387,7 +369,7 @@
 
             mqttClient.on('message', async (topic, payload) => {
                 const msg = JSON.parse(payload.toString());
-                
+
                 if (msg.type === 'chat') {
                     if (msg.from !== myId) appendChatMessage(msg.name, msg.text, false);
                     return;
@@ -400,10 +382,10 @@
                     appendSystemMessage(`${msg.name} joined.`);
                     sendMsg({ type: 'welcome', to: msg.from, name: myName });
                     setupPeer(msg.from, msg.name, myId > msg.from);
-                } 
+                }
                 else if (msg.type === 'welcome') {
                     setupPeer(msg.from, msg.name, myId > msg.from);
-                } 
+                }
                 else if (msg.type === 'offer') {
                     const p = setupPeer(msg.from, msg.name, false);
                     await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -411,12 +393,12 @@
                     const answer = await p.pc.createAnswer();
                     await p.pc.setLocalDescription(answer);
                     sendMsg({ type: 'answer', to: msg.from, sdp: p.pc.localDescription });
-                } 
+                }
                 else if (msg.type === 'answer') {
                     const p = setupPeer(msg.from, msg.name, false);
                     await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
                     flushIceQueue(msg.from);
-                } 
+                }
                 else if (msg.type === 'ice') {
                     const p = setupPeer(msg.from, msg.name, false);
                     if (p.pc.remoteDescription && p.pc.remoteDescription.type) {
@@ -424,7 +406,7 @@
                     } else {
                         p.iceQueue.push(msg.candidate);
                     }
-                } 
+                }
                 else if (msg.type === 'leave') {
                     appendSystemMessage(`${peers[msg.from]?.name || 'Someone'} left.`);
                     removePeer(msg.from);
@@ -460,7 +442,7 @@
         pc.ontrack = event => {
             if (audioEl.srcObject !== event.streams[0]) {
                 audioEl.srcObject = event.streams[0];
-                
+
                 try {
                     const remoteSource = audioCtx.createMediaStreamSource(event.streams[0]);
                     const remoteAnalyser = audioCtx.createAnalyser();
@@ -521,7 +503,7 @@
         if (!audioCtx) return;
 
         localAnalyser.getByteFrequencyData(audioDataArray);
-        
+
         let voiceEnergy = 0;
 
         // Dynamically calculate frequency bin mappings based on UI slider settings
@@ -536,23 +518,23 @@
                 count++;
             }
         }
-        
+
         let voiceAvg = count > 0 ? (voiceEnergy / count) : 0;
 
         // Base percentage strictly off isolated human voice frequencies
         const localVol = Math.min(100, (voiceAvg / 255) * 100);
-        
+
         const threshold = parseFloat(micThreshold.value);
         const holdMs = parseInt(holdTime.value);
-        
+
         // VAD LOGIC: Activation threshold works ONLY on the isolated voice volume
         if (localVol >= threshold) {
             lastSpeakTime = Date.now();
         }
-        
+
         // Hold mic open for calculated hold time after volume drops (prevents stuttering)
         const isSpeaking = (Date.now() - lastSpeakTime) < holdMs;
-        
+
         // Apply muting to the localStream outgoing tracks
         if (localStream && !isMuted) {
             localStream.getAudioTracks()[0].enabled = isSpeaking;
@@ -564,7 +546,7 @@
         const localMeter = document.getElementById('meter-local');
         if (localMeter) {
             localMeter.style.width = localVol + '%';
-            
+
             // Color feedback (Red = Manually Muted, Gray = Blocked by Gate, Green = Active)
             if (isMuted) {
                 localMeter.style.background = '#dc3545';
@@ -603,12 +585,12 @@
                 </div>
             </li>
         `;
-        
+
         Object.keys(peers).forEach(id => {
             const peer = peers[id];
             const state = peer.pc.connectionState;
             const isConnected = state === 'connected';
-            
+
             const li = document.createElement('li');
             li.innerHTML = `
                 <div class="peer-header">
@@ -633,8 +615,8 @@
                 const id = e.target.getAttribute('data-id');
                 const vol = parseFloat(e.target.value);
                 if (peers[id]) {
-                    peers[id].volume = vol; 
-                    if (peers[id].audioEl) peers[id].audioEl.volume = vol; 
+                    peers[id].volume = vol;
+                    if (peers[id].audioEl) peers[id].audioEl.volume = vol;
                 }
             });
         });
@@ -644,14 +626,14 @@
     function appendChatMessage(name, text, isSelf) {
         const div = document.createElement('div');
         div.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
-        
+
         const nameEl = document.createElement('strong');
         nameEl.innerText = isSelf ? "You" : name;
         const textNode = document.createTextNode(text);
-        
+
         div.appendChild(nameEl);
         div.appendChild(textNode);
-        
+
         chatHistory.appendChild(div);
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
@@ -667,7 +649,7 @@
     sendChatBtn.onclick = () => {
         const text = chatInput.value.trim();
         if (!text) return;
-        
+
         appendChatMessage(myName, text, true);
         sendMsg({ type: 'chat', name: myName, text: text });
         chatInput.value = '';
